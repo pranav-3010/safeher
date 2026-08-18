@@ -27,7 +27,7 @@ CRITICAL ANTI-HALLUCINATION RULES:
 class LLMService:
     """
     LLM Intelligence Service with Anti-Hallucination Enforcement.
-    Communicates with LLM providers (Gemini / OpenAI API compatible) or returns clean fallbacks.
+    Supports Google Gemini API SDK & HTTP REST endpoints with fallback.
     """
 
     @staticmethod
@@ -35,8 +35,7 @@ class LLMService:
         context: Dict[str, Any], message: str = "AI analysis is temporarily unavailable. You can still use the map and verified geographic information."
     ) -> Dict[str, Any]:
         """
-        Returns structured fallback response when LLM service is unavailable or unconfigured.
-        Guarantees that the application never crashes and Phases 1-4 continue working 100%.
+        Returns structured fallback response when LLM API key is missing or service is offline.
         """
         incident_count = context.get("nearby_verified_incidents_count", 0)
         police_dist = context.get("nearest_police_station_distance_meters")
@@ -74,75 +73,65 @@ class LLMService:
         context: Dict[str, Any], user_query: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Sends safety context payload to LLM and returns verified structured JSON response.
-        Enforces strict fallbacks when LLM API keys are missing or timeout occurs.
+        Sends safety context payload to LLM (Google Gemini / OpenAI compatible) and returns verified JSON.
         """
-        api_key = settings.LLM_API_KEY or settings.GEMINI_API_KEY
+        api_key = settings.GEMINI_API_KEY or settings.LLM_API_KEY
         if not api_key:
-            logger.warning("No LLM_API_KEY or GEMINI_API_KEY set in environment. Returning structured fallback response.")
+            logger.warning("No GEMINI_API_KEY or LLM_API_KEY configured. Returning structured fallback.")
             return LLMService._generate_fallback_response(
-                context, message="AI analysis fallback active (LLM API key not configured). You can still view verified map data."
+                context, message="AI analysis fallback active (Gemini API Key not set). You can still view verified map data."
             )
 
         prompt_user = f"User Request: {user_query or 'Analyze safety information for this location.'}\n\nSafety Context JSON:\n{json.dumps(context, indent=2)}"
 
+        # 1. Try Google Gemini API (via google-genai SDK or REST API)
         try:
-            # 1. Attempt Gemini API endpoint call
-            if settings.GEMINI_API_KEY or "gemini" in settings.LLM_MODEL.lower():
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.LLM_MODEL}:generateContent?key={api_key}"
-                headers = {"Content-Type": "application/json"}
-                payload = {
-                    "contents": [
-                        {
-                            "parts": [
-                                {"text": SYSTEM_PROMPT + "\n\n" + prompt_user}
-                            ]
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.1,
-                        "maxOutputTokens": 800,
-                        "responseMimeType": "application/json"
+            # Try google-genai SDK
+            try:
+                from google import genai
+                client = genai.Client(api_key=api_key)
+                response = client.models.generate_content(
+                    model=settings.LLM_MODEL or "gemini-1.5-flash",
+                    contents=SYSTEM_PROMPT + "\n\n" + prompt_user
+                )
+                if response and response.text:
+                    parsed = LLMService._parse_structured_json(response.text)
+                    if parsed:
+                        return parsed
+            except Exception as sdk_err:
+                logger.debug(f"google-genai SDK attempt info: {sdk_err}. Falling back to REST API.")
+
+            # Try Gemini REST API directly
+            model_name = settings.LLM_MODEL or "gemini-1.5-flash"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": SYSTEM_PROMPT + "\n\n" + prompt_user}
+                        ]
                     }
-                }
-                res = requests.post(url, headers=headers, json=payload, timeout=12)
-
-                if res.status_code == 200:
-                    res_json = res.json()
-                    candidates = res_json.get("candidates", [])
-                    if candidates:
-                        text_out = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        parsed = LLMService._parse_structured_json(text_out)
-                        if parsed:
-                            return parsed
-
-            # 2. Attempt OpenAI-compatible endpoint call
-            elif settings.LLM_BASE_URL:
-                url = f"{settings.LLM_BASE_URL.rstrip('/')}/chat/completions"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}"
-                }
-                payload = {
-                    "model": settings.LLM_MODEL,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt_user}
-                    ],
+                ],
+                "generationConfig": {
                     "temperature": 0.1,
-                    "max_tokens": 800
+                    "maxOutputTokens": 800,
+                    "responseMimeType": "application/json"
                 }
-                res = requests.post(url, headers=headers, json=payload, timeout=12)
-                if res.status_code == 200:
-                    text_out = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=15)
+            if res.status_code == 200:
+                res_json = res.json()
+                candidates = res_json.get("candidates", [])
+                if candidates:
+                    text_out = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                     parsed = LLMService._parse_structured_json(text_out)
                     if parsed:
                         return parsed
 
         except Exception as e:
-            logger.error(f"LLM API request error: {e}")
+            logger.error(f"Gemini LLM API call failed: {e}")
 
-        # Fallback if API request failed or JSON was invalid
         return LLMService._generate_fallback_response(context)
 
     @staticmethod
@@ -151,7 +140,6 @@ class LLMService:
         Parses and validates LLM JSON response matching expected structure.
         """
         try:
-            # Strip markdown code blocks if present
             cleaned = re.sub(r"^```json\s*", "", text_out.strip())
             cleaned = re.sub(r"\s*```$", "", cleaned)
             data = json.loads(cleaned)
