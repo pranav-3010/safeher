@@ -32,8 +32,8 @@ const p1 = ["AQ.Ab8RN6Jy7LVR81G", "DYwYhQ91bliH"].join("_");
 const p2 = "3J4IZAjCagN4I3voLFqJA";
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || `${p1}-${p2}`;
 
-// Dynamic API Base URL from environment variable or default to local FastAPI backend
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+// Dynamic API Base URL from environment variable or default to relative path on Vercel
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
@@ -266,21 +266,30 @@ class RealFastApiApiService implements ApiService {
     originLabel: string = 'Source Location',
     destLabel: string = 'Destination Location'
   ): Promise<RouteAnalysisResponse> {
+    const targetUrl = `${API_BASE_URL}/api/v1/ai/analyze-route-context`;
+    const payload = {
+      origin_latitude: originLat,
+      origin_longitude: originLng,
+      destination_latitude: destLat,
+      destination_longitude: destLng,
+      radius_meters: 2000.0
+    };
+
+    console.log(`[SafeHer API] Requesting Backend Endpoint: ${targetUrl}`, payload);
+
     try {
-      const aiRes = await fetch(`${API_BASE_URL}/api/v1/ai/analyze-route-context`, {
+      const aiRes = await fetch(targetUrl, {
         method: 'POST',
         headers: DEFAULT_HEADERS,
-        body: JSON.stringify({
-          origin_latitude: originLat,
-          origin_longitude: originLng,
-          destination_latitude: destLat,
-          destination_longitude: destLng,
-          radius_meters: 2000.0
-        })
+        body: JSON.stringify(payload)
       });
+
+      console.log(`[SafeHer API] Backend Status Code: ${aiRes.status}`);
 
       if (aiRes.ok) {
         const aiData = await aiRes.json();
+        console.log(`[SafeHer API] Backend Payload Received:`, aiData);
+
         const facilities = await this.getSafeHavens();
         const incidents = await this.getIncidents();
 
@@ -318,8 +327,8 @@ class RealFastApiApiService implements ApiService {
           errors: []
         };
       }
-    } catch (e) {
-      console.warn("Backend FastAPI server not directly reachable in browser, seamlessly connecting to live Supabase REST API & Gemini AI...");
+    } catch (e: any) {
+      console.warn(`[SafeHer API] Backend URL ${targetUrl} failed (${e.message}). Connecting to direct Supabase PostGIS + Gemini engine...`);
     }
 
     try {
@@ -396,7 +405,7 @@ Output JSON ONLY:
           }
         }
       } catch (err) {
-        console.warn("Gemini fetch info:", err);
+        console.warn("[SafeHer API] Gemini direct fetch info:", err);
       }
 
       return {
@@ -429,7 +438,7 @@ Output JSON ONLY:
         errors: []
       };
     } catch (err: any) {
-      console.error("Direct Supabase fallback error:", err);
+      console.error("[SafeHer API] Supabase PostGIS engine error:", err);
       throw new Error(`Unable to fetch journey safety data: ${err.message}`);
     }
   }
@@ -450,7 +459,7 @@ Output JSON ONLY:
         return await res.json();
       }
     } catch (err: any) {
-      console.warn("Backend AI Question call info, using direct Gemini response:", err);
+      console.warn("[SafeHer API] Backend AI Question call info, using direct Gemini response:", err);
     }
 
     const prompt = `You are SafeHer AI Assistant for Women's Safety.
@@ -481,7 +490,7 @@ Output JSON ONLY:
         }
       }
     } catch (e) {
-      console.warn("Direct Gemini question info:", e);
+      console.warn("[SafeHer API] Direct Gemini question info:", e);
     }
 
     return {

@@ -60,6 +60,16 @@ def create_application() -> FastAPI:
     if os.path.exists(static_dir):
         app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
 
+    @app.get("/health", summary="Health Check")
+    @app.get(f"{settings.API_V1_PREFIX}/health", summary="Health Check V1")
+    def health_check():
+        return {
+            "status": "ok",
+            "service": "safeher-backend",
+            "environment": settings.APP_ENV,
+            "database": "ok"
+        }
+
     return app
 
 
