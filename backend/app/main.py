@@ -13,6 +13,15 @@ from app.core.exceptions import (
 from app.api.v1.router import api_v1_router
 
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode.")
+    yield
+    logger.info(f"Shutting down {settings.APP_NAME}.")
+
+
 def create_application() -> FastAPI:
     """
     Application factory for the Women Safety Risk-Zone Backend.
@@ -24,7 +33,8 @@ def create_application() -> FastAPI:
         version="1.0.0",
         docs_url=f"{settings.API_V1_PREFIX}/docs" if settings.DEBUG else None,
         redoc_url=f"{settings.API_V1_PREFIX}/redoc" if settings.DEBUG else None,
-        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json" if settings.DEBUG else None
+        openapi_url=f"{settings.API_V1_PREFIX}/openapi.json" if settings.DEBUG else None,
+        lifespan=lifespan
     )
 
     # Configure CORS
@@ -44,15 +54,8 @@ def create_application() -> FastAPI:
     # Include Versioned API Routers
     app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
 
-    @app.on_event("startup")
-    async def startup_event():
-        logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode.")
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        logger.info(f"Shutting down {settings.APP_NAME}.")
-
     return app
+
 
 
 app = create_application()
