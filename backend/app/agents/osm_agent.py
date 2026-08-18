@@ -1,50 +1,91 @@
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 import requests
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, text
 from app.agents.base_agent import DataSourceAgent
 from app.models.spatial_features import OSMFeature, RoadSegment, EmergencyFacility
 from app.services.data_processing import validate_coordinates, clean_text_string
 from app.core.logging import logger
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OSM_API_URL = "https://api.openstreetmap.org/api/0.6/map"
 
 
 class OSMAgent(DataSourceAgent):
     """
-    Ingestion Agent for OpenStreetMap GIS data via Overpass API queries.
+    Ingestion Agent for OpenStreetMap GIS data via Official OpenStreetMap v0.6 API.
     Populates osm_features, road_segments (LineString), and emergency_facilities (Point) with PostGIS geometries.
     """
 
-    def __init__(self, source_name: str = "OpenStreetMap India Overpass API"):
+    def __init__(self, source_name: str = "OpenStreetMap India API"):
         super().__init__(source_name=source_name, source_type="osm")
 
-    def fetch(self, bbox: Tuple[float, float, float, float] = (17.35, 78.45, 17.42, 78.52), timeout_sec: int = 20) -> List[Dict[str, Any]]:
+    def fetch(self, bbox: Tuple[float, float, float, float] = (17.38, 78.47, 17.40, 78.49), timeout_sec: int = 25) -> List[Dict[str, Any]]:
         """
-        Executes Overpass QL bounding-box query for amenities, facilities, and road ways.
-        BBOX format: (min_lat, min_lng, max_lat, max_lng)
+        Fetches map features from official OpenStreetMap v0.6 API for target bounding box.
+        BBOX format for OSM v0.6 API: (min_lng, min_lat, max_lng, max_lat)
         """
         min_lat, min_lng, max_lat, max_lng = bbox
-        query = f"""
-        [out:json][timeout:15];
-        (
-          node["amenity"~"police|hospital|pharmacy|atm|bank|fuel|bus_station"]({min_lat},{min_lng},{max_lat},{max_lng});
-          way["highway"~"primary|secondary|tertiary|residential"]({min_lat},{min_lng},{max_lat},{max_lng});
-        );
-        out body geom;
-        """
+        url = f"{OSM_API_URL}?bbox={min_lng},{min_lat},{max_lng},{max_lat}"
+        headers = {"User-Agent": "SafeHer-OSMBot/1.0 (+https://github.com/pranav-3010/safeher)"}
 
         try:
-            headers = {"User-Agent": "SafeHer-OSMBot/1.0 (+https://github.com/pranav-3010/safeher)"}
-            res = requests.post(OVERPASS_URL, data={"data": query}, headers=headers, timeout=timeout_sec)
-            if res.status_code == 200:
-                elements = res.json().get("elements", [])
-                return elements
-            logger.warning(f"Overpass API returned status: {res.status_code}")
-            return []
+            res = requests.get(url, headers=headers, timeout=timeout_sec)
+            if res.status_code != 200:
+                logger.warning(f"OSM API returned HTTP status: {res.status_code}")
+                return []
+
+            root = ET.fromstring(res.content)
+            
+            # Map node ID -> (lat, lng)
+            node_coords = {}
+            elements = []
+
+            # 1. Parse Nodes
+            for node in root.findall("node"):
+                node_id = node.get("id")
+                lat = float(node.get("lat"))
+                lng = float(node.get("lon"))
+                node_coords[node_id] = (lat, lng)
+
+                tags = {tag.get("k"): tag.get("v") for tag in node.findall("tag")}
+                amenity = tags.get("amenity")
+                if amenity or tags.get("name"):
+                    elements.append({
+                        "type": "node",
+                        "id": node_id,
+                        "lat": lat,
+                        "lon": lng,
+                        "tags": tags
+                    })
+
+            # 2. Parse Ways (Roads)
+            for way in root.findall("way"):
+                way_id = way.get("id")
+                tags = {tag.get("k"): tag.get("v") for tag in way.findall("tag")}
+                highway = tags.get("highway")
+
+                if highway:
+                    pts = []
+                    for nd in way.findall("nd"):
+                        ref = nd.get("ref")
+                        if ref in node_coords:
+                            pts.append({"lat": node_coords[ref][0], "lon": node_coords[ref][1]})
+
+                    if len(pts) >= 2:
+                        elements.append({
+                            "type": "way",
+                            "id": way_id,
+                            "tags": tags,
+                            "geometry": pts
+                        })
+
+            logger.info(f"Successfully fetched {len(elements)} relevant OSM elements from Official OSM API.")
+            return elements
+
         except Exception as e:
-            logger.error(f"Overpass API fetch error: {e}")
+            logger.error(f"Failed to fetch from OpenStreetMap API: {e}")
             return []
 
     def validate(self, raw_records: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
@@ -119,16 +160,14 @@ class OSMAgent(DataSourceAgent):
 
             if r["element_type"] == "node":
                 amenity = tags.get("amenity", "other")
-                if amenity in ["police", "hospital", "fuel", "bus_station"]:
-                    facility_map = {
-                        "police": "police",
-                        "hospital": "hospital",
-                        "fuel": "petrol_station",
-                        "bus_station": "metro"
-                    }
-                    r["facility_type"] = facility_map.get(amenity, "other")
-                else:
-                    r["facility_type"] = None
+                facility_map = {
+                    "police": "police",
+                    "hospital": "hospital",
+                    "fuel": "petrol_station",
+                    "bus_station": "metro",
+                    "pharmacy": "hospital"
+                }
+                r["facility_type"] = facility_map.get(amenity)
                 r["category"] = amenity
 
             elif r["element_type"] == "way":
@@ -174,25 +213,20 @@ class OSMAgent(DataSourceAgent):
                 retrieved_at=r["retrieved_at"]
             )
             db.add(feature)
-            db.flush()
 
             # 2. If Emergency Facility Node, populate emergency_facilities table
             if r["element_type"] == "node" and r.get("facility_type"):
                 facility = EmergencyFacility(
                     name=r["name"] or f"OSM {r['facility_type'].title()} Facility",
                     facility_type=r["facility_type"],
+                    location=func.ST_SetSRID(func.ST_MakePoint(r["longitude"], r["latitude"]), 4326),
                     source="OpenStreetMap",
                     source_reference=r["osm_id"],
                     verification_status="VERIFIED"
                 )
                 db.add(facility)
-                db.flush()
 
-                db.execute(text(
-                    "UPDATE emergency_facilities SET location = ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography WHERE id = :id"
-                ), {"lng": r["longitude"], "lat": r["latitude"], "id": facility.id})
-
-            # 3. If Road Way, populate road_segments table with PostGIS LineString geometry & length
+            # 3. If Road Way, populate road_segments table with PostGIS LineString geometry
             elif r["element_type"] == "way":
                 pts_str = ", ".join([f"{pt[0]} {pt[1]}" for pt in r["geometry_points"]])
                 linestring_wkt = f"LINESTRING({pts_str})"
@@ -201,24 +235,20 @@ class OSMAgent(DataSourceAgent):
                     osm_id=r["osm_id"],
                     road_name=r["name"],
                     road_type=r.get("highway_type"),
+                    geometry=func.ST_GeogFromText(linestring_wkt),
+                    length_meters=0.0,
                     max_speed=r.get("max_speed"),
                     oneway=r.get("oneway"),
                     lighting_status=r.get("lighting_status") # NULL = UNKNOWN (No fabrication!)
                 )
                 db.add(segment)
-                db.flush()
-
-                # Update LineString geometry & compute length in meters using ST_Length
-                db.execute(text(
-                    """
-                    UPDATE road_segments 
-                    SET geometry = ST_GeogFromText(:wkt),
-                        length_meters = ST_Length(ST_GeogFromText(:wkt))
-                    WHERE id = :id
-                    """
-                ), {"wkt": linestring_wkt, "id": segment.id})
 
             inserted_count += 1
 
         db.commit()
+
+        # Update PostGIS length_meters on inserted road segments using ST_Length
+        db.execute(text("UPDATE road_segments SET length_meters = ST_Length(geometry) WHERE length_meters = 0.0 OR length_meters IS NULL"))
+        db.commit()
+
         return inserted_count
