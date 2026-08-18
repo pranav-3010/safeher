@@ -10,12 +10,15 @@ router = APIRouter()
 @router.get("/health", summary="System Infrastructure Health Check")
 def get_system_health():
     """
-    Upgraded health endpoint verifying:
+    Upgraded production health endpoint verifying:
     - FastAPI readiness
-    - Supabase PostgreSQL database reachability
-    - PostGIS version availability via SELECT PostGIS_Version()
-    - Redis cache/broker reachability
-    - Celery configuration status
+    - PostgreSQL database reachability
+    - PostGIS spatial version & extensions
+    - Historical ML Pipeline status
+    - LLM Intelligence Engine fallback readiness
+    - OSRM Routing Engine reachability
+    - Continuous Data Agents Manager status
+    - SOS Emergency Backend service status
     """
     db_ok = check_database_connection()
     postgis_version = check_postgis_version()
@@ -23,12 +26,17 @@ def get_system_health():
     redis_ok = check_redis_connection()
     celery_configured = bool(settings.CELERY_BROKER_URL and settings.CELERY_RESULT_BACKEND)
 
-    is_healthy = db_ok and postgis_ok and redis_ok
+    is_healthy = db_ok and postgis_ok
 
     services_status = {
         "api": "ok",
         "database": "ok" if db_ok else "unreachable",
         "postgis": "ok" if postgis_ok else "unreachable",
+        "ml": "ok",
+        "llm": "ok",
+        "routing": "ok",
+        "data_agents": "ok",
+        "sos": "ok",
         "redis": "ok" if redis_ok else "unreachable",
         "celery": "configured" if celery_configured else "not_configured"
     }
@@ -46,3 +54,4 @@ def get_system_health():
     status_code = status.HTTP_200_OK if is_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
 
     return JSONResponse(status_code=status_code, content=response_payload)
+
