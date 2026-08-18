@@ -3,6 +3,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.endpoints.data_sources import router as data_sources_router
 from app.api.v1.endpoints.map import router as map_router
 from app.api.v1.endpoints.ai import router as ai_router
+from app.api.v1.endpoints.journey import router as journey_router
 
 api_v1_router = APIRouter()
 
@@ -11,3 +12,5 @@ api_v1_router.include_router(health_router, tags=["Health"])
 api_v1_router.include_router(data_sources_router, prefix="/data", tags=["Data Sources & Quality"])
 api_v1_router.include_router(map_router, prefix="/map", tags=["Maps & Geographic Intelligence"])
 api_v1_router.include_router(ai_router, prefix="/ai", tags=["LLM AI Intelligence Layer"])
+api_v1_router.include_router(journey_router, prefix="/journey", tags=["Journey Safety Context"])
+

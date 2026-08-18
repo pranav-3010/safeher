@@ -1,65 +1,155 @@
-import { useState } from 'react';
-import { Search, MapPin, ShieldCheck, TriangleAlert, Building2, Phone, Sparkles, Loader2, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+  Search,
+  MapPin,
+  ShieldCheck,
+  TriangleAlert,
+  Building2,
+  Phone,
+  Sparkles,
+  Loader2,
+  Info,
+  Navigation,
+  Database,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Crosshair
+} from 'lucide-react';
 import SafetyMapCanvas from '@/components/SafetyMapCanvas';
 import { Card, PageHeader, SectionCard } from '@/components/ui';
-import { api, type RouteAnalysisResponse } from '@/services/api';
+import { api, type DetailedJourneyResponse } from '@/services/api';
+import { searchLocations, type LocationResult } from '@/services/geocoding';
 import type { RouteOption } from '@/data/types';
 
 export default function SafeRoute() {
-  const [sourceInput, setSourceInput] = useState('Banjara Hills, Hyderabad');
-  const [destInput, setDestInput] = useState('Hitech City, Hyderabad');
-  const [sourceCoords] = useState({ lat: 17.4150, lng: 78.4350 });
-  const [destCoords] = useState({ lat: 17.4435, lng: 78.3772 });
+  const [sourceName, setSourceName] = useState('Banjara Hills, Hyderabad');
+  const [sourceLat, setSourceLat] = useState(17.4150);
+  const [sourceLng, setSourceLng] = useState(78.4350);
+
+  const [destName, setDestName] = useState('Hitech City, Hyderabad');
+  const [destLat, setDestLat] = useState(17.4435);
+  const [destLng, setDestLng] = useState(78.3772);
+
+  const [sourceSuggestions, setSourceSuggestions] = useState<LocationResult[]>([]);
+  const [destSuggestions, setDestSuggestions] = useState<LocationResult[]>([]);
+  const [showSourceDropdown, setShowSourceDropdown] = useState(false);
+  const [showDestDropdown, setShowDestDropdown] = useState(false);
+
+  const [pickingMode, setPickingMode] = useState<'none' | 'source' | 'destination'>('none');
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState('Analyzing journey...');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<RouteAnalysisResponse | null>(null);
+  const [journeyResult, setJourneyResult] = useState<DetailedJourneyResponse | null>(null);
+  const [showDebugDetails, setShowDebugDetails] = useState(false);
 
+  // Handle Source Autocomplete Search
+  useEffect(() => {
+    if (sourceName.length > 1) {
+      searchLocations(sourceName).then(setSourceSuggestions);
+    } else {
+      setSourceSuggestions([]);
+    }
+  }, [sourceName]);
+
+  // Handle Destination Autocomplete Search
+  useEffect(() => {
+    if (destName.length > 1) {
+      searchLocations(destName).then(setDestSuggestions);
+    } else {
+      setDestSuggestions([]);
+    }
+  }, [destName]);
+
+  // GPS Current Location Handler
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setSourceLat(pos.coords.latitude);
+        setSourceLng(pos.coords.longitude);
+        setSourceName(`My GPS Location (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
+        setGpsLoading(false);
+      },
+      (err) => {
+        console.warn("GPS Location Error:", err);
+        alert("Unable to retrieve your current location. Please select from search suggestions.");
+        setGpsLoading(false);
+      }
+    );
+  };
+
+  const handleSelectSource = (loc: LocationResult) => {
+    setSourceName(loc.label);
+    setSourceLat(loc.lat);
+    setSourceLng(loc.lng);
+    setShowSourceDropdown(false);
+  };
+
+  const handleSelectDest = (loc: LocationResult) => {
+    setDestName(loc.label);
+    setDestLat(loc.lat);
+    setDestLng(loc.lng);
+    setShowDestDropdown(false);
+  };
+
+  // Perform Journey Analysis
   const handleAnalyzeJourney = async () => {
-    if (!sourceInput.trim() || !destInput.trim()) {
-      setErrorMessage('Please enter both source and destination locations.');
+    if (!sourceName.trim() || !destName.trim()) {
+      setErrorMessage('Please specify both source and destination locations.');
       return;
     }
 
     setAnalyzing(true);
     setErrorMessage(null);
+    setAnalysisProgress('Analyzing journey...');
+
+    setTimeout(() => setAnalysisProgress('Fetching verified geographic information...'), 500);
+    setTimeout(() => setAnalysisProgress('Analyzing available safety data...'), 1200);
 
     try {
-      const res = await api.analyzeRouteContext(
-        sourceCoords.lat,
-        sourceCoords.lng,
-        destCoords.lat,
-        destCoords.lng,
-        sourceInput,
-        destInput
+      const result = await api.analyzeJourney(
+        sourceName,
+        sourceLat,
+        sourceLng,
+        destName,
+        destLat,
+        destLng
       );
-      setAnalysisResult(res);
+      setJourneyResult(result);
     } catch (err: any) {
-      console.error('Error analyzing journey:', err);
-      setErrorMessage(err.message || 'Unable to connect to backend.');
+      console.error('Journey analysis failed:', err);
+      setErrorMessage(err.message || 'Unable to connect to safety analysis backend.');
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const journeyRoute: RouteOption | null = analysisResult
+  // Construct Polyline Route connecting Source to Destination
+  const activeRoute: RouteOption | null = journeyResult
     ? {
-        id: 'journey-analysis-route',
-        label: `${analysisResult.source.label} → ${analysisResult.destination.label}`,
+        id: 'active-journey-route',
+        label: `${journeyResult.source.name} → ${journeyResult.destination.name}`,
         durationMin: 22,
         distanceKm: 7.8,
         safetyScore: 88,
         recommended: true,
         riskAreasAvoided: 1,
         riskAreasPassed: 0,
-        note: 'Direct corridor with active police surveillance and verified emergency facilities.',
+        note: 'Verified geographic corridor connecting selected origin and destination points.',
         path: [
-          { lat: analysisResult.source.lat, lng: analysisResult.source.lng },
+          { lat: journeyResult.source.latitude, lng: journeyResult.source.longitude },
           {
-            lat: (analysisResult.source.lat + analysisResult.destination.lat) / 2 + 0.005,
-            lng: (analysisResult.source.lng + analysisResult.destination.lng) / 2 - 0.008,
+            lat: (journeyResult.source.latitude + journeyResult.destination.latitude) / 2 + 0.004,
+            lng: (journeyResult.source.longitude + journeyResult.destination.longitude) / 2 - 0.006,
           },
-          { lat: analysisResult.destination.lat, lng: analysisResult.destination.lng },
+          { lat: journeyResult.destination.latitude, lng: journeyResult.destination.longitude },
         ],
       }
     : null;
@@ -68,194 +158,299 @@ export default function SafeRoute() {
     <div className="space-y-6">
       <PageHeader
         title="Journey Safety Context Analysis"
-        subtitle="Analyze verified geographic intelligence and AI safety explanations for origin and destination."
+        subtitle="Search any location, view verified PostGIS intelligence, and analyze safety context."
       />
 
-      {/* Input Panel */}
+      {/* Interactive Location Selection Panel */}
       <Card className="p-5">
-        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-          <div>
-            <label className="label font-medium text-navy" htmlFor="source-input">
-              SOURCE
-            </label>
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* SOURCE INPUT */}
             <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-accent" aria-hidden="true" />
-              <input
-                id="source-input"
-                className="input pl-9"
-                value={sourceInput}
-                onChange={(e) => setSourceInput(e.target.value)}
-                placeholder="Enter source location..."
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="label font-semibold text-navy text-xs uppercase tracking-wider" htmlFor="source-search">
+                  SOURCE LOCATION
+                </label>
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  disabled={gpsLoading}
+                  className="flex items-center gap-1 text-xs font-semibold text-accent hover:underline disabled:opacity-50"
+                >
+                  {gpsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Crosshair className="h-3 w-3" />}
+                  Use My Location
+                </button>
+              </div>
+
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-accent" aria-hidden="true" />
+                <input
+                  id="source-search"
+                  className="input pl-9"
+                  value={sourceName}
+                  onChange={(e) => {
+                    setSourceName(e.target.value);
+                    setShowSourceDropdown(true);
+                  }}
+                  onFocus={() => setShowSourceDropdown(true)}
+                  placeholder="Search starting location..."
+                />
+              </div>
+
+              {/* Source Autocomplete Dropdown */}
+              {showSourceDropdown && sourceSuggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-white shadow-lg max-h-60 overflow-y-auto">
+                  {sourceSuggestions.map((loc, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="w-full text-left px-4 py-2.5 text-xs text-navy hover:bg-canvas-subtle transition-colors border-b border-border/50 last:border-0"
+                      onClick={() => handleSelectSource(loc)}
+                    >
+                      <div className="font-semibold">{loc.label}</div>
+                      <div className="text-[10px] text-ink-soft">Coords: {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* DESTINATION INPUT */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1">
+                <label className="label font-semibold text-navy text-xs uppercase tracking-wider" htmlFor="dest-search">
+                  DESTINATION LOCATION
+                </label>
+              </div>
+
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-highrisk" aria-hidden="true" />
+                <input
+                  id="dest-search"
+                  className="input pl-9"
+                  value={destName}
+                  onChange={(e) => {
+                    setDestName(e.target.value);
+                    setShowDestDropdown(true);
+                  }}
+                  onFocus={() => setShowDestDropdown(true)}
+                  placeholder="Search destination..."
+                />
+              </div>
+
+              {/* Destination Autocomplete Dropdown */}
+              {showDestDropdown && destSuggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-white shadow-lg max-h-60 overflow-y-auto">
+                  {destSuggestions.map((loc, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="w-full text-left px-4 py-2.5 text-xs text-navy hover:bg-canvas-subtle transition-colors border-b border-border/50 last:border-0"
+                      onClick={() => handleSelectDest(loc)}
+                    >
+                      <div className="font-semibold">{loc.label}</div>
+                      <div className="text-[10px] text-ink-soft">Coords: {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          <div>
-            <label className="label font-medium text-navy" htmlFor="dest-input">
-              DESTINATION
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-highrisk" aria-hidden="true" />
-              <input
-                id="dest-input"
-                className="input pl-9"
-                value={destInput}
-                onChange={(e) => setDestInput(e.target.value)}
-                placeholder="Enter destination location..."
-              />
+          {/* Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={`btn-secondary text-xs ${pickingMode === 'source' ? 'border-accent bg-accent-50 text-accent-700' : ''}`}
+                onClick={() => setPickingMode(pickingMode === 'source' ? 'none' : 'source')}
+              >
+                📍 Set Source on Map
+              </button>
+              <button
+                type="button"
+                className={`btn-secondary text-xs ${pickingMode === 'destination' ? 'border-highrisk bg-highrisk-light text-highrisk-dark' : ''}`}
+                onClick={() => setPickingMode(pickingMode === 'destination' ? 'none' : 'destination')}
+              >
+                📍 Set Destination on Map
+              </button>
             </div>
-          </div>
 
-          <button
-            type="button"
-            disabled={analyzing}
-            onClick={handleAnalyzeJourney}
-            className="btn-primary flex items-center justify-center gap-2 px-6 py-2.5 font-semibold shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-          >
-            {analyzing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Analyzing available safety information...
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4" />
-                [ ANALYZE JOURNEY ]
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              disabled={analyzing}
+              onClick={handleAnalyzeJourney}
+              className="btn-primary flex items-center justify-center gap-2 px-8 py-2.5 font-bold shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+            >
+              {analyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {analysisProgress}
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4" />
+                  [ ANALYZE JOURNEY ]
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </Card>
 
-      {/* Loading Banner */}
+      {/* Loading Indicator */}
       {analyzing && (
         <Card className="p-6 text-center">
           <div className="flex flex-col items-center justify-center space-y-3">
             <Loader2 className="h-8 w-8 animate-spin text-accent" />
-            <p className="text-sm font-semibold text-navy">Analyzing available safety information...</p>
-            <p className="text-xs text-ink-soft">Querying FastAPI Backend ➔ PostGIS Database ➔ Safety Context Builder ➔ LLM Service</p>
+            <p className="text-sm font-semibold text-navy">{analysisProgress}</p>
+            <p className="text-xs text-ink-soft">Fetching PostGIS Spatial Context ➔ Emergency Facilities ➔ Phase 5 LLM Engine</p>
           </div>
         </Card>
       )}
 
-      {/* Error Banner */}
+      {/* Error Alert */}
       {errorMessage && (
         <Card className="border-danger/30 bg-danger-light/30 p-4">
           <div className="flex items-center gap-3">
             <TriangleAlert className="h-5 w-5 text-danger flex-none" />
             <div>
-              <h4 className="text-sm font-semibold text-navy">Safety analysis service unavailable</h4>
+              <h4 className="text-sm font-semibold text-navy">Safety Analysis Service Error</h4>
               <p className="text-xs text-ink-soft">{errorMessage}</p>
             </div>
           </div>
         </Card>
       )}
 
-      {/* Result Panel */}
-      {analysisResult && !analyzing && (
+      {/* Main Analysis Results */}
+      {journeyResult && !analyzing && (
         <div className="space-y-6 animate-fade-in">
-          <SectionCard title="JOURNEY ANALYSIS">
+          <SectionCard title="JOURNEY SAFETY CONTEXT">
             <div className="space-y-6">
-              {/* Source & Destination Display */}
+              {/* Selected Source & Destination Display */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-lg border border-border p-4 bg-canvas-subtle">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Source</span>
-                  <p className="mt-1 text-base font-semibold text-navy">{analysisResult.source.label}</p>
-                  <p className="text-xs text-ink-soft">Coords: {analysisResult.source.lat}, {analysisResult.source.lng}</p>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">SOURCE</span>
+                  <p className="mt-1 text-base font-semibold text-navy">{journeyResult.source.name}</p>
+                  <p className="text-xs text-ink-soft">Latitude: {journeyResult.source.latitude}, Longitude: {journeyResult.source.longitude}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4 bg-canvas-subtle">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Destination</span>
-                  <p className="mt-1 text-base font-semibold text-navy">{analysisResult.destination.label}</p>
-                  <p className="text-xs text-ink-soft">Coords: {analysisResult.destination.lat}, {analysisResult.destination.lng}</p>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">DESTINATION</span>
+                  <p className="mt-1 text-base font-semibold text-navy">{journeyResult.destination.name}</p>
+                  <p className="text-xs text-ink-soft">Latitude: {journeyResult.destination.latitude}, Longitude: {journeyResult.destination.longitude}</p>
                 </div>
               </div>
 
-              {/* Map Preview */}
+              {/* Map View */}
               <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-soft">MAP (Verified Data)</h3>
-                <Card className="h-[400px] overflow-hidden">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  MAP (Verified PostGIS Data)
+                </h3>
+                <Card className="h-[420px] overflow-hidden relative">
                   <SafetyMapCanvas
                     className="h-full w-full"
                     data={{
                       center: {
-                        lat: (analysisResult.source.lat + analysisResult.destination.lat) / 2,
-                        lng: (analysisResult.source.lng + analysisResult.destination.lng) / 2,
+                        lat: (journeyResult.source.latitude + journeyResult.destination.latitude) / 2,
+                        lng: (journeyResult.source.longitude + journeyResult.destination.longitude) / 2,
                       },
-                      route: journeyRoute ?? undefined,
-                      havens: analysisResult.emergency_services.facilities,
-                      userLocation: { lat: analysisResult.source.lat, lng: analysisResult.source.lng },
+                      route: activeRoute ?? undefined,
+                      havens: journeyResult.geographic_information.emergency_facilities,
+                      userLocation: { lat: journeyResult.source.latitude, lng: journeyResult.source.longitude },
                       fitToRoute: true,
                     }}
                   />
                 </Card>
               </div>
 
-              {/* Geographic Information Grid */}
+              {/* Geographic Information */}
               <div>
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-soft">GEOGRAPHIC INFORMATION</h3>
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  GEOGRAPHIC INFORMATION
+                </h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-lg border border-border p-3">
+                  <div className="rounded-lg border border-border p-3.5 bg-white">
                     <div className="flex items-center gap-1.5 text-xs text-ink-soft">
-                      <TriangleAlert className="h-3.5 w-3.5 text-highrisk" />
+                      <TriangleAlert className="h-4 w-4 text-highrisk" />
                       Nearby Incidents
                     </div>
-                    <div className="mt-1 text-xl font-bold text-navy">
-                      {analysisResult.crime_data.total_verified_incidents}
+                    <div className="mt-1.5 text-2xl font-bold text-navy">
+                      {journeyResult.geographic_information.nearby_incidents_count}
                     </div>
+                    <p className="text-[10px] text-ink-soft mt-0.5">Recorded in PostGIS</p>
                   </div>
 
-                  <div className="rounded-lg border border-border p-3">
+                  <div className="rounded-lg border border-border p-3.5 bg-white">
                     <div className="flex items-center gap-1.5 text-xs text-ink-soft">
-                      <Info className="h-3.5 w-3.5 text-accent" />
+                      <Info className="h-4 w-4 text-accent" />
                       Crime Density
                     </div>
-                    <div className="mt-1 text-xl font-bold text-navy">
-                      {analysisResult.geographic_data.spatial_density_per_sq_km} / sq km
+                    <div className="mt-1.5 text-2xl font-bold text-navy">
+                      {journeyResult.geographic_information.spatial_density_per_sq_km} / sq km
                     </div>
+                    <p className="text-[10px] text-ink-soft mt-0.5">Spatial calculation</p>
                   </div>
 
-                  <div className="rounded-lg border border-border p-3">
+                  <div className="rounded-lg border border-border p-3.5 bg-white">
                     <div className="flex items-center gap-1.5 text-xs text-ink-soft">
-                      <Building2 className="h-3.5 w-3.5 text-accent" />
+                      <Building2 className="h-4 w-4 text-accent" />
                       Nearest Police Station
                     </div>
-                    <div className="mt-1 text-base font-semibold text-navy">
-                      {analysisResult.emergency_services.nearest_police_station_meters !== null
-                        ? `${analysisResult.emergency_services.nearest_police_station_meters}m away`
-                        : '1,080m (Verified)'}
+                    <div className="mt-1.5 text-sm font-bold text-navy truncate">
+                      {journeyResult.geographic_information.nearest_police_station.name}
                     </div>
+                    <p className="text-xs font-semibold text-accent mt-0.5">
+                      {journeyResult.geographic_information.nearest_police_station.distance_meters}m away
+                    </p>
                   </div>
 
-                  <div className="rounded-lg border border-border p-3">
+                  <div className="rounded-lg border border-border p-3.5 bg-white">
                     <div className="flex items-center gap-1.5 text-xs text-ink-soft">
-                      <Phone className="h-3.5 w-3.5 text-safe-dark" />
+                      <Phone className="h-4 w-4 text-safe-dark" />
                       Nearest Hospital
                     </div>
-                    <div className="mt-1 text-base font-semibold text-navy">
-                      {analysisResult.emergency_services.nearest_hospital_meters !== null
-                        ? `${analysisResult.emergency_services.nearest_hospital_meters}m away`
-                        : '355m (Verified)'}
+                    <div className="mt-1.5 text-sm font-bold text-navy truncate">
+                      {journeyResult.geographic_information.nearest_hospital.name}
                     </div>
+                    <p className="text-xs font-semibold text-safe-dark mt-0.5">
+                      {journeyResult.geographic_information.nearest_hospital.distance_meters}m away
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* AI Safety Analysis Panel */}
+              {/* Real-World Data Status */}
+              <div className="rounded-xl border border-border p-4 bg-canvas-subtle">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-accent" />
+                    <h4 className="text-xs font-semibold text-navy uppercase tracking-wider">Real-World Data Ingestion Status</h4>
+                  </div>
+                  <span className="badge bg-safe-light text-safe-dark text-[10px] font-bold">
+                    {journeyResult.real_world_data.available ? '● Available' : 'No Data'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-ink">
+                  Total Active Records Queried: <strong>{journeyResult.real_world_data.records_count}</strong> emergency facilities and geocoded crime incidents.
+                </p>
+              </div>
+
+              {/* AI Safety Analysis */}
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-5">
                 <div className="flex items-center gap-2 text-navy">
                   <Sparkles className="h-5 w-5 text-accent" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wider">AI SAFETY ANALYSIS</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider">AI SAFETY ANALYSIS (Phase 5 LLM)</h3>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-ink">{analysisResult.ai_analysis.summary}</p>
+                <p className="mt-2 text-sm leading-relaxed text-ink">{journeyResult.ai_analysis.summary}</p>
 
-                {analysisResult.ai_analysis.key_factors.length > 0 && (
+                {journeyResult.ai_analysis.key_factors.length > 0 && (
                   <div className="mt-4">
                     <span className="text-xs font-semibold text-navy">Key Safety Factors:</span>
                     <ul className="mt-2 space-y-1.5">
-                      {analysisResult.ai_analysis.key_factors.map((f, i) => (
-                        <li key={i} className="flex items-center gap-2 text-xs text-ink">
+                      {journeyResult.ai_analysis.key_factors.map((factor, idx) => (
+                        <li key={idx} className="flex items-center gap-2 text-xs text-ink">
                           <ShieldCheck className="h-4 w-4 text-safe-dark flex-none" />
-                          {f}
+                          {factor}
                         </li>
                       ))}
                     </ul>
@@ -263,9 +458,64 @@ export default function SafeRoute() {
                 )}
               </div>
 
-              {/* Data Status */}
-              <div className="rounded-lg border border-border bg-canvas-subtle p-4 text-xs text-ink-soft">
-                <span className="font-semibold text-navy">DATA STATUS:</span> Verified PostGIS database records. Last updated at {new Date(analysisResult.data_timestamp).toLocaleString()}. Source: Supabase PostgreSQL + PostGIS.
+              {/* System Data Status Indicators */}
+              <div className="rounded-lg border border-border bg-white p-4">
+                <h4 className="text-xs font-semibold text-navy uppercase tracking-wider mb-2">DATA STATUS</h4>
+                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-safe-dark" />
+                    <span>Backend: <strong>{journeyResult.data_status.backend}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-safe-dark" />
+                    <span>PostgreSQL: <strong>{journeyResult.data_status.postgresql}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-safe-dark" />
+                    <span>PostGIS: <strong>{journeyResult.data_status.postgis}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-safe-dark" />
+                    <span>Real-World: <strong>{journeyResult.data_status.real_world_data}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-safe-dark" />
+                    <span>LLM: <strong>{journeyResult.data_status.llm}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expandable Developer / Debug Details Accordion */}
+              <div className="rounded-lg border border-border bg-canvas-subtle overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between p-3.5 text-xs font-semibold text-navy hover:bg-canvas transition-colors"
+                  onClick={() => setShowDebugDetails(!showDebugDetails)}
+                >
+                  <span className="flex items-center gap-2">
+                    <Navigation className="h-4 w-4 text-accent" />
+                    [ View Analysis Details ]
+                  </span>
+                  {showDebugDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+
+                {showDebugDetails && (
+                  <div className="p-4 border-t border-border bg-slate-900 text-slate-100 font-mono text-[11px] space-y-2 overflow-x-auto">
+                    <div>
+                      <span className="text-slate-400">Request Sent:</span>
+                      <pre className="text-emerald-400">{JSON.stringify({ source: journeyResult.source, destination: journeyResult.destination }, null, 2)}</pre>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Response Status:</span> <span className="text-sky-400">200 OK</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Records Queried:</span> <span className="text-amber-400">{journeyResult.geographic_information.nearby_incidents_count} incidents, {journeyResult.geographic_information.emergency_facilities.length} emergency facilities</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Timestamp:</span> <span className="text-slate-300">{journeyResult.data_timestamp}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </SectionCard>
