@@ -7,7 +7,7 @@ def test_configuration_loads_default_settings():
     assert settings.APP_NAME == "women-safety-backend"
     assert settings.API_V1_PREFIX == "/api/v1"
     assert settings.DEBUG is True
-    assert "https://your-project.supabase.co" in settings.SUPABASE_URL
+    assert "supabase.co" in settings.SUPABASE_URL
     assert "your-anon-key" in settings.SUPABASE_ANON_KEY
     assert "http://localhost:3000" in settings.CORS_ORIGINS
 

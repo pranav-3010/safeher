@@ -1,0 +1,42 @@
+data_sources:
+  - id: "osm-overpass-india"
+    name: "OpenStreetMap India Overpass API"
+    organization: "OpenStreetMap Foundation"
+    source_type: "osm"
+    official_url: "https://overpass-api.de"
+    access_method: "OVERPASS_API"
+    update_frequency: "REALTIME"
+    license: "ODbL"
+    terms_of_use: "https://wiki.openstreetmap.org/wiki/Overpass_API/Acceptable_Use_Policy"
+    geographic_coverage: "India / Global"
+    geographic_precision: "EXACT_GEOMETRY"
+    is_active: true
+    is_verified: true
+
+  - id: "google-news-rss-safety"
+    name: "Google News RSS - Women Safety India"
+    organization: "Google News RSS Feed"
+    source_type: "news"
+    official_url: "https://news.google.com/rss/search"
+    access_method: "RSS"
+    update_frequency: "HOURLY"
+    license: "PUBLIC_RSS"
+    terms_of_use: "https://news.google.com"
+    geographic_coverage: "India"
+    geographic_precision: "ARTICLE_TEXT"
+    is_active: true
+    is_verified: true
+
+  - id: "ncrb-open-data"
+    name: "NCRB Open Crime Data Portal"
+    organization: "National Crime Records Bureau India"
+    source_type: "government"
+    official_url: "https://data.gov.in"
+    access_method: "API_CSV"
+    update_frequency: "YEARLY"
+    license: "Government Open Data License - India (GODL)"
+    terms_of_use: "https://data.gov.in/terms-of-use"
+    geographic_coverage: "State / District Level India"
+    geographic_precision: "DISTRICT_LEVEL"
+    is_active: true
+    is_verified: true
