@@ -689,6 +689,9 @@ export default function SafeRoute() {
         </div>
       )}
 
+      {/* PHASE 8: AI + ML + LLM FUSION ENGINE INTERFACE */}
+      <FusionRiskSection />
+
       {/* PHASE 7: DYNAMIC RISK ENGINE INTERFACE */}
       <DynamicRiskSection />
 
@@ -697,6 +700,177 @@ export default function SafeRoute() {
     </div>
   );
 }
+
+function FusionRiskSection() {
+  const [fusLat, setFusLat] = useState('17.4150');
+  const [fusLng, setFusLng] = useState('78.4350');
+  const [fusLoading, setFusLoading] = useState(false);
+  const [fusResult, setFusResult] = useState<any>(null);
+
+  const handleRunFusionAssessment = async () => {
+    setFusLoading(true);
+    setFusResult(null);
+    try {
+      const res = await api.getFusionRisk(parseFloat(fusLat), parseFloat(fusLng));
+      setFusResult(res);
+    } catch (err: any) {
+      setFusResult({
+        success: false,
+        message: err.message || 'Failed to evaluate AI+ML Fusion Assessment.'
+      });
+    } finally {
+      setFusLoading(false);
+    }
+  };
+
+  return (
+    <Card className="p-5 border-2 border-purple-200 bg-purple-50/20">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-purple-700" />
+          <h3 className="text-sm font-bold text-navy uppercase tracking-wider">
+            AI + ML + LLM FUSION SAFETY ASSESSMENT (PHASE 8 INTEGRATION)
+          </h3>
+        </div>
+        {fusResult?.fusion?.status && (
+          <span className={`badge ${
+            fusResult.fusion.status === 'FULL_DATA'
+              ? 'bg-purple-700 text-white'
+              : 'bg-amber-600 text-white'
+          } font-bold text-[10px]`}>
+            {fusResult.fusion.status}
+          </span>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="fus-lat">Target Latitude</label>
+          <input
+            id="fus-lat"
+            className="input font-mono text-xs"
+            value={fusLat}
+            onChange={(e) => setFusLat(e.target.value)}
+            placeholder="e.g. 17.4150"
+          />
+        </div>
+
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="fus-lng">Target Longitude</label>
+          <input
+            id="fus-lng"
+            className="input font-mono text-xs"
+            value={fusLng}
+            onChange={(e) => setFusLng(e.target.value)}
+            placeholder="e.g. 78.4350"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          disabled={fusLoading}
+          onClick={handleRunFusionAssessment}
+          className="btn-primary flex items-center gap-2 text-xs font-bold px-6 py-2 bg-purple-700 hover:bg-purple-800"
+        >
+          {fusLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          [ RUN AI+ML FUSION ASSESSMENT ]
+        </button>
+      </div>
+
+      {/* Fusion Result Display */}
+      {fusResult && (
+        <div className="mt-5 rounded-xl border border-border bg-white p-5 space-y-4 font-sans">
+          {/* Overall Calculated Risk Banner */}
+          <div className="rounded-lg border-2 border-purple-300 bg-purple-50 p-4 text-center">
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-900">OVERALL CALCULATED RISK</span>
+            <div className="mt-1 text-3xl font-black text-purple-950">
+              {fusResult.fusion?.overall_risk_level?.toUpperCase()} ({fusResult.fusion?.overall_risk_score})
+            </div>
+            <p className="text-xs text-purple-800 mt-1">
+              Deterministic Weighted Fusion of Phase 4 Geographic, Phase 6 Historical ML, and Phase 7 Dynamic Signals.
+            </p>
+          </div>
+
+          {/* Component Risk Breakdown */}
+          <div className="grid gap-3 sm:grid-cols-3 text-xs">
+            <div className="rounded-lg border border-border p-3 bg-canvas-subtle">
+              <div className="font-bold text-ink-soft uppercase text-[10px]">Phase 6 Historical ML Risk</div>
+              <div className="text-base font-bold text-navy mt-1">
+                {fusResult.historical_ml?.score != null ? fusResult.historical_ml.score : fusResult.historical_ml?.status}
+              </div>
+              <span className="text-[10px] text-ink-soft">{fusResult.historical_ml?.model_version}</span>
+            </div>
+
+            <div className="rounded-lg border border-border p-3 bg-canvas-subtle">
+              <div className="font-bold text-ink-soft uppercase text-[10px]">Phase 7 Dynamic Risk</div>
+              <div className="text-base font-bold text-navy mt-1">
+                {fusResult.dynamic_risk?.score != null ? `${fusResult.dynamic_risk.level} (${fusResult.dynamic_risk.score})` : 'UNAVAILABLE'}
+              </div>
+              <span className="text-[10px] text-ink-soft">Status: {fusResult.dynamic_risk?.freshness?.status || 'N/A'}</span>
+            </div>
+
+            <div className="rounded-lg border border-border p-3 bg-canvas-subtle">
+              <div className="font-bold text-ink-soft uppercase text-[10px]">Phase 4 Geographic Factors</div>
+              <div className="text-base font-bold text-navy mt-1">
+                Score: {fusResult.geographic?.score}
+              </div>
+              <span className="text-[10px] text-ink-soft">{fusResult.geographic?.nearby_incidents_count} incidents within 2.0km</span>
+            </div>
+          </div>
+
+          {/* Grounded LLM Explanation */}
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+            <div className="flex items-center gap-2 text-navy mb-2">
+              <Sparkles className="h-4 w-4 text-purple-700" />
+              <h4 className="text-xs font-bold uppercase tracking-wider">GROUNDED AI EXPLANATION (PHASE 5 LLM)</h4>
+            </div>
+            <p className="text-xs leading-relaxed text-ink">{fusResult.llm_analysis?.explanation}</p>
+            {fusResult.llm_analysis?.key_factors?.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-ink">
+                {fusResult.llm_analysis.key_factors.map((kf: string, idx: number) => (
+                  <li key={idx} className="flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5 text-safe-dark flex-none" />
+                    {kf}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Data Freshness Timestamps */}
+          <div className="rounded-lg border border-border bg-canvas-subtle p-3 text-xs grid gap-2 sm:grid-cols-2">
+            <div>
+              Historical Period: <strong>{fusResult.data_freshness?.historical_period}</strong>
+            </div>
+            <div>
+              Dynamic Last Updated: <strong>{fusResult.data_freshness?.dynamic_last_updated ? new Date(fusResult.data_freshness.dynamic_last_updated).toLocaleString() : 'N/A'}</strong> ({fusResult.data_freshness?.dynamic_status})
+            </div>
+          </div>
+
+          {/* Limitations */}
+          {fusResult.limitations?.length > 0 && (
+            <div className="text-xs text-amber-900 bg-amber-50 p-3 rounded-lg border border-amber-200">
+              <div className="font-bold mb-1">SYSTEM LIMITATIONS & COMPONENT STATUS:</div>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                {fusResult.limitations.map((lim: string, idx: number) => (
+                  <li key={idx}>{lim}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Scientific Disclaimer */}
+          <div className="rounded border border-amber-200 bg-amber-50/70 p-2.5 text-[11px] text-amber-900 italic">
+            ⚠️ <strong>Scientific Requirement</strong>: {fusResult.scientific_disclaimer}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 
 function DynamicRiskSection() {
   const [dynLat, setDynLat] = useState('17.4435');
