@@ -53,6 +53,35 @@ def trigger_continuous_data_sync(db: Session = Depends(get_db)):
     return ContinuousDataAgentManager.sync_all_sources(db)
 
 
+@router.post("/sources/hyderabad-scrape", summary="Trigger Hyderabad Crime News Scraper & Location Extractor")
+def trigger_hyderabad_news_scrape(db: Session = Depends(get_db)):
+    """
+    Hyderabad Special Scraper API:
+    Executes Hyderabad News NLP Scraper, extracts geocoded localities (Banjara Hills, Hitech City, Madhapur, etc.),
+    classifies crime severity, and populates verified PostGIS crime_incidents.
+    """
+    from app.agents.hyderabad_news_agent import HyderabadNewsAgent
+
+    agent = HyderabadNewsAgent()
+    raw = agent.fetch(query="hyderabad crime news OR hyderabad women safety police")
+    valid, rejected = agent.validate(raw)
+    norm = agent.normalize(valid)
+    dedup = agent.deduplicate(db, norm)
+    inserted = agent.store(db, data_source_id=None, records=dedup)
+
+    return {
+        "success": True,
+        "agent": "HyderabadNewsAgent",
+        "raw_articles_fetched": len(raw),
+        "validated_articles": len(valid),
+        "rejected": rejected,
+        "duplicates": len(norm) - len(dedup),
+        "new_articles_and_incidents_inserted": inserted,
+        "message": f"Successfully scraped Hyderabad crime news and inserted {inserted} new PostGIS incident records."
+    }
+
+
+
 @router.get("/sources/{source_id}", summary="Get Data Source Details & Fetch History")
 def get_data_source_detail(source_id: UUID, db: Session = Depends(get_db)):
 

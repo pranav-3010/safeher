@@ -786,6 +786,8 @@ function ContinuousDataAgentsSection() {
     fetchStatus();
   }, []);
 
+  const [scrapingHyd, setScrapingHyd] = useState(false);
+
   const handleSyncNow = async () => {
     setSyncing(true);
     try {
@@ -798,13 +800,26 @@ function ContinuousDataAgentsSection() {
     }
   };
 
+  const handleScrapeHyderabadNews = async () => {
+    setScrapingHyd(true);
+    try {
+      const res = await api.triggerHyderabadNewsScrape();
+      alert(`[HYDERABAD CRIME SCRAPER & NLP]\n${res.message || 'Scraped articles and inserted new PostGIS crime incidents.'}`);
+      await fetchStatus();
+    } catch (err) {
+      console.warn("Failed to trigger Hyderabad news scraper:", err);
+    } finally {
+      setScrapingHyd(false);
+    }
+  };
+
   return (
     <Card className="p-5 border-2 border-blue-200 bg-blue-50/20">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Database className="h-5 w-5 text-blue-700" />
           <h3 className="text-sm font-bold text-navy uppercase tracking-wider">
-            LIVE DATA STATUS & CONTINUOUS AGENTS MONITOR (PHASE 10)
+            LIVE DATA STATUS & CONTINUOUS AGENTS MONITOR (PHASE 10 & HYDERABAD SCRAPER)
           </h3>
         </div>
         {sourcesResult?.overall_status && (
@@ -818,20 +833,32 @@ function ContinuousDataAgentsSection() {
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <p className="text-xs text-ink-soft">
           Continuous background workers Periodically fetch, validate, deduplicate, and ingest verified safety signals.
         </p>
-        <button
-          type="button"
-          disabled={syncing || loading}
-          onClick={handleSyncNow}
-          className="btn-primary flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 bg-blue-700 hover:bg-blue-800"
-        >
-          {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-          [ 🔄 RUN CONTINUOUS DATA SYNC ]
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={scrapingHyd || loading}
+            onClick={handleScrapeHyderabadNews}
+            className="btn-secondary flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-purple-700 text-white hover:bg-purple-800"
+          >
+            {scrapingHyd ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            [ 🗞️ RUN HYDERABAD CRIME NEWS SCRAPER ]
+          </button>
+          <button
+            type="button"
+            disabled={syncing || loading}
+            onClick={handleSyncNow}
+            className="btn-primary flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-blue-700 hover:bg-blue-800"
+          >
+            {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+            [ 🔄 RUN DATA SYNC ]
+          </button>
+        </div>
       </div>
+
 
       {sourcesResult?.sources && (
         <div className="space-y-3 font-sans">
