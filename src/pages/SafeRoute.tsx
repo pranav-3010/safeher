@@ -241,7 +241,65 @@ export default function SafeRoute() {
       {/* Interactive Location Selection Panel */}
       <Card className="p-5">
         <div className="space-y-4">
+          {/* HYDERABAD TRIP PRESETS BAR */}
+          <div className="rounded-lg bg-canvas-subtle p-3 border border-border/80">
+            <span className="text-[11px] font-bold text-navy uppercase tracking-wider block mb-2">
+              📍 QUICK HYDERABAD TRIP PRESETS:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceName("Banjara Hills, Hyderabad");
+                  setSourceCoords({ lat: 17.4150, lng: 78.4350 });
+                  setDestName("Hitech City, Hyderabad");
+                  setDestCoords({ lat: 17.4435, lng: 78.3772 });
+                }}
+                className="btn-secondary text-[11px] font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300"
+              >
+                1. Banjara Hills ➔ Hitech City
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceName("Sun City, Bandlaguda Jagir");
+                  setSourceCoords({ lat: 17.3638, lng: 78.3975 });
+                  setDestName("Narsingi, Hyderabad");
+                  setDestCoords({ lat: 17.3915, lng: 78.3598 });
+                }}
+                className="btn-secondary text-[11px] font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300"
+              >
+                2. Sun City ➔ Narsingi
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceName("Secunderabad Railway Station");
+                  setSourceCoords({ lat: 17.4399, lng: 78.4983 });
+                  setDestName("Gachibowli Financial District");
+                  setDestCoords({ lat: 17.4401, lng: 78.3489 });
+                }}
+                className="btn-secondary text-[11px] font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300"
+              >
+                3. Secunderabad ➔ Gachibowli
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSourceName("Charminar, Old City");
+                  setSourceCoords({ lat: 17.3616, lng: 78.4747 });
+                  setDestName("Jubilee Hills, Hyderabad");
+                  setDestCoords({ lat: 17.4316, lng: 78.4071 });
+                }}
+                className="btn-secondary text-[11px] font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300"
+              >
+                4. Charminar ➔ Jubilee Hills
+              </button>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
+
             {/* SOURCE INPUT */}
             <div className="relative">
               <div className="flex items-center justify-between mb-1">

@@ -13,14 +13,62 @@ OSRM_BASE_URL = "https://router.project-osrm.org/route/v1/driving"
 class SafeRouteEngine:
     """
     Phase 9 Safe Route Engine.
-    Queries OSRM for real road network geometries, samples waypoints, evaluates segment-by-segment
-    Phase 8 Fusion risk, and scores Safest, Balanced, and Fastest route options.
+    Supports Google Directions API (alternatives=true) with OSRM & PostGIS fallbacks.
+    Samples route waypoints, evaluates segment-by-segment risk, and scores Safest, Balanced, and Fastest options.
     """
+
+    @staticmethod
+    def fetch_google_directions_routes(
+        src_lat: float, src_lng: float, dst_lat: float, dst_lng: float, api_key: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Queries Google Directions API with alternatives=true to retrieve authentic Google route options.
+        """
+        url = (
+            f"https://maps.googleapis.com/maps/api/directions/json?"
+            f"origin={src_lat},{src_lng}&destination={dst_lat},{dst_lng}"
+            f"&alternatives=true&key={api_key}"
+        )
+        logger.info(f"Fetching Google Directions API routes: origin=({src_lat},{src_lng}), destination=({dst_lat},{dst_lng})")
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "SafeHer-Platform/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    routes = data.get("routes", [])
+                    if routes:
+                        logger.info(f"Google Directions API returned {len(routes)} route options.")
+                        parsed_routes = []
+                        for g_route in routes:
+                            legs = g_route.get("legs", [])
+                            dist_m = sum(leg.get("distance", {}).get("value", 0) for leg in legs)
+                            dur_s = sum(leg.get("duration", {}).get("value", 0) for leg in legs)
+                            path = []
+
+                            for leg in legs:
+                                for step in leg.get("steps", []):
+                                    end_loc = step.get("end_location", {})
+                                    if "lat" in end_loc and "lng" in end_loc:
+                                        path.append({"lat": round(end_loc["lat"], 5), "lng": round(end_loc["lng"], 5)})
+
+                            if path:
+                                parsed_routes.append({
+                                    "distance": dist_m,
+                                    "duration": dur_s,
+                                    "path": path,
+                                    "provider": "Google Maps API"
+                                })
+                        return parsed_routes
+        except Exception as e:
+            logger.warning(f"Google Directions API query failed or unconfigured ({e}). Falling back to OSRM.")
+        return []
 
     @staticmethod
     def fetch_osrm_routes(
         src_lat: float, src_lng: float, dst_lat: float, dst_lng: float
     ) -> List[Dict[str, Any]]:
+
         """
         Queries OSRM public routing API for real road polyline geometries and travel metrics.
         """
@@ -71,13 +119,32 @@ class SafeRouteEngine:
         dst_lat = float(destination["latitude"])
         dst_lng = float(destination["longitude"])
 
+        import os
+        from app.core.config import settings
+
         src_name = source.get("name", "Origin")
         dst_name = destination.get("name", "Destination")
 
-        osrm_routes = SafeRouteEngine.fetch_osrm_routes(src_lat, src_lng, dst_lat, dst_lng)
+        api_key = os.environ.get("GOOGLE_MAPS_API_KEY") or getattr(settings, "GOOGLE_MAPS_API_KEY", "")
+        google_routes = []
+        if api_key:
+            google_routes = SafeRouteEngine.fetch_google_directions_routes(src_lat, src_lng, dst_lat, dst_lng, api_key)
 
-        # Extract base route from OSRM
+        if google_routes:
+            osrm_routes = [
+                {
+                    "distance": g["distance"],
+                    "duration": g["duration"],
+                    "geometry": {"coordinates": [[pt["lng"], pt["lat"]] for pt in g["path"]]}
+                }
+                for g in google_routes
+            ]
+        else:
+            osrm_routes = SafeRouteEngine.fetch_osrm_routes(src_lat, src_lng, dst_lat, dst_lng)
+
+        # Extract base route
         base_route = osrm_routes[0] if osrm_routes else {}
+
         base_raw_coords = base_route.get("geometry", {}).get("coordinates", [])
 
         if not base_raw_coords:
