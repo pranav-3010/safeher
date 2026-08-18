@@ -105,7 +105,9 @@ export default function SafeRoute() {
     setShowDestDropdown(false);
   };
 
-  // Perform Journey Analysis with Dynamic Geocoding
+  const [routeAnalyzeResult, setRouteAnalyzeResult] = useState<any>(null);
+
+  // Perform Journey Analysis with Dynamic Geocoding and OSRM Real Road Routing
   const handleAnalyzeJourney = async () => {
     if (!sourceName.trim() || !destName.trim()) {
       setErrorMessage('Please specify both source and destination locations.');
@@ -125,19 +127,27 @@ export default function SafeRoute() {
     setDestLat(resolvedDest.lat);
     setDestLng(resolvedDest.lng);
 
-    setAnalysisProgress('Querying PostGIS spatial database & emergency facilities...');
+    setAnalysisProgress('Fetching OSRM real road routes & calculating Phase 8 segment safety...');
 
     try {
-      const result = await api.analyzeJourney(
-        resolvedSource.label,
-        resolvedSource.lat,
-        resolvedSource.lng,
-        resolvedDest.label,
-        resolvedDest.lat,
-        resolvedDest.lng
-      );
-      setJourneyResult(result);
-      setSelectedRouteId('route-safest');
+      const [journeyRes, routesRes] = await Promise.all([
+        api.analyzeJourney(
+          resolvedSource.label,
+          resolvedSource.lat,
+          resolvedSource.lng,
+          resolvedDest.label,
+          resolvedDest.lat,
+          resolvedDest.lng
+        ),
+        api.analyzeSafeRoutes(
+          { name: resolvedSource.label, latitude: resolvedSource.lat, longitude: resolvedSource.lng },
+          { name: resolvedDest.label, latitude: resolvedDest.lat, longitude: resolvedDest.lng }
+        )
+      ]);
+
+      setJourneyResult(journeyRes);
+      setRouteAnalyzeResult(routesRes);
+      setSelectedRouteId('safest');
     } catch (err: any) {
       console.error('Journey analysis failed:', err);
       setErrorMessage(err.message || 'Unable to connect to safety analysis backend.');
@@ -146,11 +156,24 @@ export default function SafeRoute() {
     }
   };
 
-  // Construct 3 Dynamic Route Options: Safest, Balanced, and Fastest
-  const generatedRoutes: RouteOption[] = journeyResult
+  // Construct 3 Real OSRM Road Route Options: Safest, Balanced, and Fastest
+  const generatedRoutes: RouteOption[] = routeAnalyzeResult?.routes
+    ? routeAnalyzeResult.routes.map((r: any) => ({
+        id: r.id,
+        label: r.label,
+        durationMin: r.duration_minutes,
+        distanceKm: r.distance_km,
+        safetyScore: r.safety_score,
+        recommended: r.recommended,
+        riskAreasAvoided: r.type === 'SAFEST' ? 2 : r.type === 'BALANCED' ? 1 : 0,
+        riskAreasPassed: r.type === 'SAFEST' ? 0 : r.type === 'BALANCED' ? 1 : 2,
+        note: r.explanation,
+        path: r.geometry
+      }))
+    : journeyResult
     ? [
         {
-          id: 'route-safest',
+          id: 'safest',
           label: 'Safest Route',
           durationMin: 24,
           distanceKm: 8.4,
@@ -165,48 +188,6 @@ export default function SafeRoute() {
               lat: journeyResult.source.latitude + (journeyResult.destination.latitude - journeyResult.source.latitude) * 0.4 + 0.005,
               lng: journeyResult.source.longitude + (journeyResult.destination.longitude - journeyResult.source.longitude) * 0.4 - 0.008,
             },
-            {
-              lat: journeyResult.source.latitude + (journeyResult.destination.latitude - journeyResult.source.latitude) * 0.7 + 0.003,
-              lng: journeyResult.source.longitude + (journeyResult.destination.longitude - journeyResult.source.longitude) * 0.7 - 0.004,
-            },
-            { lat: journeyResult.destination.latitude, lng: journeyResult.destination.longitude },
-          ],
-        },
-        {
-          id: 'route-balanced',
-          label: 'Balanced Route',
-          durationMin: 20,
-          distanceKm: 7.6,
-          safetyScore: 78,
-          recommended: false,
-          riskAreasAvoided: 1,
-          riskAreasPassed: 1,
-          note: 'Optimal balance between travel time and street lighting coverage.',
-          path: [
-            { lat: journeyResult.source.latitude, lng: journeyResult.source.longitude },
-            {
-              lat: (journeyResult.source.latitude + journeyResult.destination.latitude) / 2,
-              lng: (journeyResult.source.longitude + journeyResult.destination.longitude) / 2,
-            },
-            { lat: journeyResult.destination.latitude, lng: journeyResult.destination.longitude },
-          ],
-        },
-        {
-          id: 'route-fastest',
-          label: 'Fastest Route',
-          durationMin: 16,
-          distanceKm: 6.9,
-          safetyScore: 64,
-          recommended: false,
-          riskAreasAvoided: 0,
-          riskAreasPassed: 2,
-          note: 'Direct highway corridor; shortest duration but lower lighting on side access roads.',
-          path: [
-            { lat: journeyResult.source.latitude, lng: journeyResult.source.longitude },
-            {
-              lat: journeyResult.source.latitude + (journeyResult.destination.latitude - journeyResult.source.latitude) * 0.3 - 0.004,
-              lng: journeyResult.source.longitude + (journeyResult.destination.longitude - journeyResult.source.longitude) * 0.3 + 0.006,
-            },
             { lat: journeyResult.destination.latitude, lng: journeyResult.destination.longitude },
           ],
         },
@@ -214,6 +195,7 @@ export default function SafeRoute() {
     : [];
 
   const activeSelectedRoute = generatedRoutes.find((r) => r.id === selectedRouteId) ?? generatedRoutes[0];
+
 
   return (
     <div className="space-y-6">
