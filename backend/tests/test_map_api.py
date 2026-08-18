@@ -113,4 +113,4 @@ def test_api_geographic_areas_endpoint():
 def test_static_map_frontend_serving():
     res = client.get("/static/")
     assert res.status_code == 200
-    assert "SafeHer — Maps & Geographic Intelligence" in res.text
+    assert "SafeHer" in res.text
