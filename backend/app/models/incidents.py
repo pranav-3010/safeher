@@ -38,6 +38,43 @@ class CrimeIncident(UUIDBaseModel):
     )
 
 
+class CrimeStatistic(UUIDBaseModel):
+    """
+    NCRB and Government aggregated crime statistics at state, district, or city level.
+    Preserves aggregated case counts and crime rates without inventing fake point coordinates.
+    """
+    __tablename__ = "crime_statistics"
+
+    data_source_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True, index=True)
+    year: Mapped[int] = mapped_column(nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    district_or_city: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, index=True)
+    crime_type: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+    case_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    crime_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    source_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+
+class CrimeGeographicArea(UUIDBaseModel):
+    """
+    Police station jurisdiction boundaries, ward polygons, or district GIS geographic areas.
+    """
+    __tablename__ = "crime_geographic_areas"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    district: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, index=True)
+    area_type: Mapped[str] = mapped_column(String(100), nullable=False, default="POLICE_STATION_JURISDICTION")
+    boundary = mapped_column(Geography(geometry_type="GEOMETRY", srid=4326), nullable=False)
+    risk_index: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    source_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        Index("idx_crime_geographic_areas_boundary", "boundary", postgresql_using="gist"),
+    )
+
+
 class NewsArticle(UUIDBaseModel):
     """
     Ingested news articles and media posts referencing safety and incidents.
