@@ -21,6 +21,7 @@ import {
 import { useApp } from '@/context/AppContext';
 import DemoModeControl from './DemoModeControl';
 import Toaster from './Toaster';
+import GeminiAIAssistant from './GeminiAIAssistant';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -270,6 +271,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </div>
 
       <MobileNav />
+      <GeminiAIAssistant />
       <Toaster />
     </div>
   );
