@@ -34,8 +34,28 @@ def get_data_sources(db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/sources/status", summary="Get Continuous Updating Data Agents Status")
+def get_continuous_sources_status(db: Session = Depends(get_db)):
+    """
+    Phase 10 Monitoring API: Returns continuous updating data agents health, records statistics,
+    and actual freshness timestamps.
+    """
+    from app.services.continuous_updating_agents import ContinuousDataAgentManager
+    return ContinuousDataAgentManager.get_sources_status(db)
+
+
+@router.post("/sources/sync", summary="Trigger On-Demand Continuous Data Agents Sync Pass")
+def trigger_continuous_data_sync(db: Session = Depends(get_db)):
+    """
+    Phase 10 Trigger API: Executes continuous data agent fetch, validation, deduplication, and PostGIS ingestion.
+    """
+    from app.services.continuous_updating_agents import ContinuousDataAgentManager
+    return ContinuousDataAgentManager.sync_all_sources(db)
+
+
 @router.get("/sources/{source_id}", summary="Get Data Source Details & Fetch History")
 def get_data_source_detail(source_id: UUID, db: Session = Depends(get_db)):
+
     """
     Returns specific data source details and recent fetch logs.
     """
@@ -123,3 +143,7 @@ def get_data_quality_report(db: Session = Depends(get_db)):
             "crime_coordinate_coverage_pct": round(((crime_count - crime_missing_coords) / max(1, crime_count)) * 100, 2)
         }
     }
+
+
+
+

@@ -677,11 +677,127 @@ export default function SafeRoute() {
       {/* PHASE 7: DYNAMIC RISK ENGINE INTERFACE */}
       <DynamicRiskSection />
 
+      {/* PHASE 10: CONTINUOUS UPDATING AGENTS MONITOR */}
+      <ContinuousDataAgentsSection />
+
+      {/* PHASE 8: AI + ML + LLM FUSION ENGINE INTERFACE */}
+      <FusionRiskSection />
+
+      {/* PHASE 7: DYNAMIC RISK ENGINE INTERFACE */}
+      <DynamicRiskSection />
+
       {/* PHASE 6: HISTORICAL ML TEST INTERFACE */}
       <HistoricalMLTestSection />
     </div>
   );
 }
+
+function ContinuousDataAgentsSection() {
+  const [sourcesResult, setSourcesResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const fetchStatus = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getDataSourcesStatus();
+      setSourcesResult(data);
+    } catch (err) {
+      console.warn("Failed to fetch continuous data sources status:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    try {
+      await api.triggerDataSync();
+      await fetchStatus();
+    } catch (err) {
+      console.warn("Failed to trigger data sync:", err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <Card className="p-5 border-2 border-blue-200 bg-blue-50/20">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Database className="h-5 w-5 text-blue-700" />
+          <h3 className="text-sm font-bold text-navy uppercase tracking-wider">
+            LIVE DATA STATUS & CONTINUOUS AGENTS MONITOR (PHASE 10)
+          </h3>
+        </div>
+        {sourcesResult?.overall_status && (
+          <span className={`badge ${
+            sourcesResult.overall_status === 'HEALTHY'
+              ? 'bg-safe-dark text-white'
+              : 'bg-amber-600 text-white'
+          } font-bold text-[10px]`}>
+            ● {sourcesResult.overall_status}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-ink-soft">
+          Continuous background workers Periodically fetch, validate, deduplicate, and ingest verified safety signals.
+        </p>
+        <button
+          type="button"
+          disabled={syncing || loading}
+          onClick={handleSyncNow}
+          className="btn-primary flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 bg-blue-700 hover:bg-blue-800"
+        >
+          {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+          [ 🔄 RUN CONTINUOUS DATA SYNC ]
+        </button>
+      </div>
+
+      {sourcesResult?.sources && (
+        <div className="space-y-3 font-sans">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {sourcesResult.sources.map((src: any) => (
+              <div key={src.id} className="rounded-xl border border-border bg-white p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-navy text-[11px] truncate" title={src.name}>{src.name}</span>
+                  <span className={`badge ${
+                    src.freshness === 'CURRENT' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  } font-bold text-[9px]`}>
+                    {src.freshness}
+                  </span>
+                </div>
+                <div className="text-[10px] text-ink-soft">
+                  Frequency: <strong>{src.update_frequency}</strong>
+                </div>
+                <div className="text-[10px] text-ink-soft">
+                  Last Fetched: <strong>{src.last_fetched_at ? new Date(src.last_fetched_at).toLocaleTimeString() : 'Just now'}</strong> ({src.age_minutes}m ago)
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[10px] bg-canvas-subtle p-2 rounded">
+                  <div>Recv: <strong>{src.records_received}</strong></div>
+                  <div>Ins: <strong className="text-emerald-700">{src.records_inserted}</strong></div>
+                  <div>Rej: <strong>{src.records_rejected}</strong></div>
+                  <div>Dup: <strong>{src.duplicates}</strong></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded border border-blue-200 bg-blue-50/70 p-2.5 text-[11px] text-blue-900 italic">
+            ℹ️ <strong>Data Freshness Standard</strong>: {sourcesResult.scientific_disclaimer}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 
 function FusionRiskSection() {
   const [fusLat, setFusLat] = useState('17.4150');
