@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import json
@@ -6,13 +6,26 @@ import json
 
 class Settings(BaseSettings):
     APP_NAME: str = Field(default="women-safety-backend", description="Name of the application")
-    APP_ENV: str = Field(default="development", description="Environment mode (development, staging, production)")
+    APP_ENV: str = Field(default="development", description="Environment mode")
     DEBUG: bool = Field(default=True, description="Debug flag")
     API_V1_PREFIX: str = Field(default="/api/v1", description="API v1 route prefix")
 
+    SUPABASE_URL: str = Field(
+        default="https://your-project.supabase.co",
+        description="Supabase Project Base URL"
+    )
+    SUPABASE_ANON_KEY: str = Field(
+        default="your-anon-key",
+        description="Supabase Public Anon Key"
+    )
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(
+        default="your-service-role-key",
+        description="Supabase Service Role Key (Server-side only)"
+    )
+
     DATABASE_URL: str = Field(
-        default="postgresql://postgres:postgres@localhost:5432/women_safety_db",
-        description="SQLAlchemy PostgreSQL connection string"
+        default="postgresql://postgres:postgres@localhost:5432/postgres",
+        description="SQLAlchemy PostgreSQL connection string for Supabase"
     )
 
     REDIS_URL: str = Field(

@@ -7,6 +7,8 @@ def test_configuration_loads_default_settings():
     assert settings.APP_NAME == "women-safety-backend"
     assert settings.API_V1_PREFIX == "/api/v1"
     assert settings.DEBUG is True
+    assert "https://your-project.supabase.co" in settings.SUPABASE_URL
+    assert "your-anon-key" in settings.SUPABASE_ANON_KEY
     assert "http://localhost:3000" in settings.CORS_ORIGINS
 
 
@@ -17,5 +19,4 @@ def test_cors_origins_parsing():
 
 def test_invalid_configuration_rejected():
     with pytest.raises(Exception):
-        # Passing an invalid type to boolean field DEBUG
         Settings(DEBUG="invalid_boolean_string_that_cannot_cast")
