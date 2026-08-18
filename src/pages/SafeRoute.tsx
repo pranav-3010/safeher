@@ -689,11 +689,192 @@ export default function SafeRoute() {
         </div>
       )}
 
+      {/* PHASE 7: DYNAMIC RISK ENGINE INTERFACE */}
+      <DynamicRiskSection />
+
       {/* PHASE 6: HISTORICAL ML TEST INTERFACE */}
       <HistoricalMLTestSection />
     </div>
   );
 }
+
+function DynamicRiskSection() {
+  const [dynLat, setDynLat] = useState('17.4435');
+  const [dynLng, setDynLng] = useState('78.3772');
+  const [dynRadius, setDynRadius] = useState('2000');
+  const [dynLoading, setDynLoading] = useState(false);
+  const [dynResult, setDynResult] = useState<any>(null);
+
+  const handleCheckDynamicRisk = async () => {
+    setDynLoading(true);
+    setDynResult(null);
+    try {
+      const res = await api.getDynamicRisk(parseFloat(dynLat), parseFloat(dynLng), undefined, parseFloat(dynRadius));
+      setDynResult(res);
+    } catch (err: any) {
+      setDynResult({
+        success: false,
+        status: 'ERROR',
+        message: err.message || 'Failed to evaluate current dynamic risk.'
+      });
+    } finally {
+      setDynLoading(false);
+    }
+  };
+
+  return (
+    <Card className="p-5 border-2 border-emerald-200 bg-emerald-50/20">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-safe-dark" />
+          <h3 className="text-sm font-bold text-navy uppercase tracking-wider">
+            DYNAMIC SAFETY RISK ENGINE (PHASE 7 CURRENT INTELLIGENCE)
+          </h3>
+        </div>
+        {dynResult?.data_freshness?.status && (
+          <span className={`badge ${
+            dynResult.data_freshness.status === 'CURRENT'
+              ? 'bg-emerald-600 text-white'
+              : dynResult.data_freshness.status === 'RECENT'
+              ? 'bg-blue-600 text-white'
+              : 'bg-amber-600 text-white'
+          } font-bold text-[10px]`}>
+            {dynResult.data_freshness.status}
+          </span>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="dyn-lat">Latitude</label>
+          <input
+            id="dyn-lat"
+            className="input font-mono text-xs"
+            value={dynLat}
+            onChange={(e) => setDynLat(e.target.value)}
+            placeholder="e.g. 17.4435"
+          />
+        </div>
+
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="dyn-lng">Longitude</label>
+          <input
+            id="dyn-lng"
+            className="input font-mono text-xs"
+            value={dynLng}
+            onChange={(e) => setDynLng(e.target.value)}
+            placeholder="e.g. 78.3772"
+          />
+        </div>
+
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="dyn-radius">Radius (Meters)</label>
+          <input
+            id="dyn-radius"
+            className="input text-xs"
+            value={dynRadius}
+            onChange={(e) => setDynRadius(e.target.value)}
+            placeholder="2000"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          disabled={dynLoading}
+          onClick={handleCheckDynamicRisk}
+          className="btn-primary flex items-center gap-2 text-xs font-bold px-6 py-2 bg-emerald-600 hover:bg-emerald-700"
+        >
+          {dynLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          [ CHECK CURRENT DYNAMIC RISK ]
+        </button>
+      </div>
+
+      {/* Dynamic Risk Result Display */}
+      {dynResult && (
+        <div className="mt-4 rounded-xl border border-border bg-white p-5 space-y-4 font-sans">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div>
+              <span className="text-[11px] font-bold text-ink-soft uppercase">Current Dynamic Risk</span>
+              <div className="text-2xl font-black text-navy mt-0.5">
+                {dynResult.dynamic_risk ? `${dynResult.dynamic_risk.level} (${dynResult.dynamic_risk.score})` : 'UNAVAILABLE'}
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] font-bold text-ink-soft uppercase">Recent Incidents</span>
+              <div className="text-2xl font-black text-navy mt-0.5">{dynResult.recent_incidents?.count ?? 0}</div>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] font-bold text-ink-soft uppercase">Analysis Radius</span>
+              <div className="text-2xl font-black text-navy mt-0.5">{(parseFloat(dynRadius) / 1000).toFixed(1)} km</div>
+            </div>
+          </div>
+
+          {/* Freshness Banner */}
+          <div className="flex items-center justify-between text-xs text-ink-soft bg-canvas-subtle p-3 rounded-lg border border-border">
+            <div>
+              Data Last Updated: <strong>{dynResult.data_freshness?.last_updated ? new Date(dynResult.data_freshness.last_updated).toLocaleString() : 'N/A'}</strong>
+            </div>
+            <div>
+              Data Age: <strong>{dynResult.data_freshness?.age_minutes != null ? `${dynResult.data_freshness.age_minutes} minutes` : 'Unknown'}</strong>
+            </div>
+          </div>
+
+          {/* Recent Verified Incidents Table */}
+          {dynResult.recent_incidents?.list?.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold text-navy uppercase tracking-wider mb-2">RECENT VERIFIED INCIDENTS</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border border-border">
+                  <thead className="bg-canvas-subtle text-ink-soft uppercase font-bold text-[10px]">
+                    <tr>
+                      <th className="p-2">Incident Type</th>
+                      <th className="p-2">Timestamp</th>
+                      <th className="p-2">Distance</th>
+                      <th className="p-2">Time Decay</th>
+                      <th className="p-2">Dist Decay</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-navy font-mono text-[11px]">
+                    {dynResult.recent_incidents.list.map((inc: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="p-2 font-semibold font-sans">{inc.type}</td>
+                        <td className="p-2 text-ink-soft">{new Date(inc.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td className="p-2 font-bold text-accent">{inc.distance_meters}m</td>
+                        <td className="p-2 text-ink-soft">{inc.time_decay}</td>
+                        <td className="p-2 text-ink-soft">{inc.distance_decay}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Numerical Explanation Factors */}
+          <div>
+            <h4 className="text-xs font-bold text-navy uppercase tracking-wider mb-1">WHY THIS DYNAMIC RISK SCORE?</h4>
+            <ul className="space-y-1 text-xs text-ink">
+              {dynResult.factors?.map((f: string, idx: number) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-safe-dark flex-none" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Scientific Disclaimer */}
+          <div className="rounded border border-amber-200 bg-amber-50/70 p-2.5 text-[11px] text-amber-900 italic">
+            ⚠️ <strong>Scientific Requirement</strong>: {dynResult.scientific_disclaimer}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 
 function HistoricalMLTestSection() {
   const [mlLat, setMlLat] = useState('17.4150');

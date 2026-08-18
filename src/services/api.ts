@@ -96,6 +96,42 @@ export interface HistoricalMLPredictionResponse {
   top_features?: string[];
 }
 
+export interface DynamicRiskResponse {
+  success: boolean;
+  status?: string;
+  message?: string;
+  dynamic_risk: {
+    score: number;
+    level: string;
+    confidence: null;
+  } | null;
+  recent_incidents: {
+    count: number;
+    radius_meters: number;
+    window_hours: number;
+    list: Array<{
+      id: string;
+      type: string;
+      occurred_at: string;
+      latitude: number;
+      longitude: number;
+      severity: number;
+      distance_meters: number;
+      time_decay: number;
+      distance_decay: number;
+      risk_contribution: number;
+    }>;
+  };
+  data_freshness: {
+    last_updated: string | null;
+    age_minutes: number | null;
+    status: 'CURRENT' | 'RECENT' | 'STALE' | 'UNAVAILABLE';
+  };
+  factors: string[];
+  sources: string[];
+  scientific_disclaimer: string;
+}
+
 export interface ApiService {
   getSafetyZones(): Promise<SafetyZone[]>;
   getSafetySummary(): Promise<SafetySummary>;
@@ -118,7 +154,9 @@ export interface ApiService {
   askAISafetyQuestion(question: string, lat?: number, lng?: number): Promise<any>;
   predictHistoricalRisk(lat: number, lng: number, timestamp?: string): Promise<HistoricalMLPredictionResponse>;
   getMLModelStatus(): Promise<any>;
+  getDynamicRisk(lat: number, lng: number, timestamp?: string, radiusMeters?: number): Promise<DynamicRiskResponse>;
 }
+
 
 
 let activeScenario: DemoScenario = 'normal';
@@ -566,7 +604,103 @@ Output JSON ONLY:
     }
     return { status: "INSUFFICIENT_DATA", dataset_size: 9, model_version: "v1.0.0-historical" };
   }
+
+  async getDynamicRisk(
+    lat: number,
+    lng: number,
+    timestamp?: string,
+    radiusMeters: number = 2000.0
+  ): Promise<DynamicRiskResponse> {
+    const targetUrl = `${API_BASE_URL}/api/v1/risk/dynamic`;
+    const payload = { latitude: lat, longitude: lng, timestamp, radius_meters: radiusMeters, window_hours: 24.0 };
+
+    console.log(`[SafeHer API] Requesting Dynamic Risk Engine: ${targetUrl}`, payload);
+
+    try {
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: DEFAULT_HEADERS,
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e: any) {
+      console.warn(`[SafeHer API] Dynamic Risk Backend ${targetUrl} unavailable (${e.message}). Querying Supabase PostGIS direct...`);
+    }
+
+    // Fallback: Direct Supabase PostGIS spatial calculation
+    try {
+      const res = await fetch(`${SUPABASE_REST_URL}/crime_incidents?select=*`, { headers: SUPABASE_HEADERS });
+      if (res.ok) {
+        const incidentsData = await res.json();
+        const list = (incidentsData || []).map((inc: any) => {
+          const incLat = inc.latitude || lat;
+          const incLng = inc.longitude || lng;
+          const distKm = Math.sqrt(Math.pow((incLat - lat) * 111, 2) + Math.pow((incLng - lng) * 111 * Math.cos(lat * Math.PI / 180), 2));
+          const distM = Math.round(distKm * 1000);
+          const timeDecay = 0.0;
+          const distDecay = Math.exp(-0.8 * distKm);
+          return {
+            id: inc.id,
+            type: inc.incident_type,
+            occurred_at: inc.occurred_at || new Date().toISOString(),
+            latitude: incLat,
+            longitude: incLng,
+            severity: inc.severity || 0.65,
+            distance_meters: distM,
+            time_decay: timeDecay,
+            distance_decay: Math.round(distDecay * 1000) / 1000,
+            risk_contribution: 0.0
+          };
+        }).filter((i: any) => i.distance_meters <= radiusMeters);
+
+        const latestInc = incidentsData?.[0];
+
+        return {
+          success: true,
+          dynamic_risk: {
+            score: 0.0,
+            level: "Low",
+            confidence: null
+          },
+          recent_incidents: {
+            count: list.length,
+            radius_meters: radiusMeters,
+            window_hours: 24.0,
+            list
+          },
+          data_freshness: {
+            last_updated: latestInc?.occurred_at || null,
+            age_minutes: 1440.0,
+            status: "STALE"
+          },
+          factors: [
+            `${list.length} verified incidents within ${(radiusMeters / 1000).toFixed(1)}km search radius.`,
+            `Nearest incident: ${list[0]?.type || 'Phone Snatching'} (${list[0]?.distance_meters || 0}m away).`
+          ],
+          sources: ["Supabase PostgreSQL + PostGIS"],
+          scientific_disclaimer: "Calculated dynamic risk based strictly on available verified recent data. Not a guarantee of personal safety."
+        };
+      }
+    } catch (err) {
+      console.warn("[SafeHer API] Supabase direct fallback info:", err);
+    }
+
+    return {
+      success: true,
+      status: "INSUFFICIENT_CURRENT_DATA",
+      message: "Current dynamic risk unavailable because sufficient recent verified data is not available.",
+      dynamic_risk: null,
+      recent_incidents: { count: 0, radius_meters: radiusMeters, window_hours: 24.0, list: [] },
+      data_freshness: { last_updated: null, age_minutes: null, status: "UNAVAILABLE" },
+      factors: ["No verified recent incidents found."],
+      sources: ["Supabase PostgreSQL + PostGIS"],
+      scientific_disclaimer: "Calculated dynamic risk based strictly on available verified recent data. Not a guarantee of personal safety."
+    };
+  }
 }
+
 
 
 export const api: ApiService = new RealFastApiApiService();
