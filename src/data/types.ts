@@ -25,7 +25,7 @@ export interface SafetyZone {
 
 export interface RouteOption {
   id: string;
-  label: 'Safest' | 'Balanced' | 'Fastest';
+  label: 'Safest' | 'Balanced' | 'Fastest' | string;
   durationMin: number;
   distanceKm: number;
   safetyScore: number; // 0-100, higher = safer
@@ -34,7 +34,10 @@ export interface RouteOption {
   path: LatLng[];
   note: string;
   recommended: boolean;
+  pros?: string[];
+  cons?: string[];
 }
+
 
 export type IncidentSource = 'Verified' | 'Community' | 'News' | 'AI Signal';
 export type IncidentStatus = 'Reviewing' | 'Confirmed' | 'Resolved' | 'Expired';

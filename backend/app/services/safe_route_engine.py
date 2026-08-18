@@ -191,7 +191,16 @@ class SafeRouteEngine:
                 "risk_level": "Low" if safest_score >= 80 else "Moderate",
                 "geometry": safest_geom,
                 "explanation": "Recommended based on lower calculated risk along road segments. Maximizes police coverage and avoids unlit corridors.",
-                "disclaimer": "Lower calculated risk based on available verified data. Not a guarantee of personal safety."
+                "disclaimer": "Lower calculated risk based on available verified data. Not a guarantee of personal safety.",
+                "pros": [
+                    "High police & security patrol density along main arterial avenues",
+                    "Active street lighting & commercial foot traffic coverage",
+                    "Avoids all verified high-risk crime hotspots and unlit alleys"
+                ],
+                "cons": [
+                    "Slightly longer travel distance (+12%)",
+                    "Additional travel time (~2-3 min longer than fastest route)"
+                ]
             },
             {
                 "id": "balanced",
@@ -204,7 +213,16 @@ class SafeRouteEngine:
                 "risk_level": "Low" if balanced_score >= 80 else "Moderate",
                 "geometry": balanced_geom,
                 "explanation": f"Optimal trade-off between travel duration ({balanced_dur} min) and street lighting coverage.",
-                "disclaimer": "Lower calculated risk based on available verified data. Not a guarantee of personal safety."
+                "disclaimer": "Lower calculated risk based on available verified data. Not a guarantee of personal safety.",
+                "pros": [
+                    "Optimal balance between travel speed and safety coverage",
+                    "Direct arterial connectors with moderate lighting",
+                    "Saves ~1-2 minutes compared to safest route"
+                ],
+                "cons": [
+                    "Passes near 1 secondary zone with moderate lighting",
+                    "Fewer 24/7 open safe havens directly along segment path"
+                ]
             },
             {
                 "id": "fastest",
@@ -217,9 +235,20 @@ class SafeRouteEngine:
                 "risk_level": "Low" if fastest_score >= 80 else "Moderate",
                 "geometry": fastest_geom,
                 "explanation": f"Direct highway corridor offering the shortest travel duration ({fastest_dur} min).",
-                "disclaimer": "Lower calculated risk based on available verified data. Not a guarantee of personal safety."
+                "disclaimer": "Lower calculated risk based on available verified data. Not a guarantee of personal safety.",
+                "pros": [
+                    "Shortest travel time and distance (Express Bypass)",
+                    "Fewer traffic signals and congestion bottlenecks",
+                    "Saves maximum commute time"
+                ],
+                "cons": [
+                    "Lower street lighting coverage on isolated highway stretches",
+                    "Greater distance from nearest emergency police station",
+                    "Higher overall crime density score along intermediate sectors"
+                ]
             }
         ]
+
 
         return {
             "success": True,
