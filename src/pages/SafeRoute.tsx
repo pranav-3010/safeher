@@ -374,9 +374,10 @@ export default function SafeRoute() {
             <div className="grid gap-4 md:grid-cols-3">
               {generatedRoutes.map((r) => {
                 const isSelected = r.id === selectedRouteId;
-                const isSafest = r.id === 'route-safest';
-                const isFastest = r.id === 'route-fastest';
-                const isBalanced = r.id === 'route-balanced';
+                const isSafest = r.id === 'safest' || r.id === 'route-safest';
+                const isFastest = r.id === 'fastest' || r.id === 'route-fastest';
+                const isBalanced = r.id === 'balanced' || r.id === 'route-balanced';
+
 
                 const borderTone = isSelected
                   ? isSafest
