@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         description="Supabase Project Base URL"
     )
     SUPABASE_ANON_KEY: str = Field(
-        default="your-anon-key",
+        default="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmdmNrdW9taGJkYnlyb2dlbGN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTIxMTIsImV4cCI6MjA5NzYyODExMn0.hyAWAERq8ifO3v_3ntyBDSI0CTHshAoZzPjlNjqIWXg",
         description="Supabase Public Anon Key"
     )
     SUPABASE_SERVICE_ROLE_KEY: str = Field(
