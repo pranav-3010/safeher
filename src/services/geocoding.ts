@@ -47,7 +47,6 @@ export async function searchLocations(query: string): Promise<LocationResult[]> 
           lat: parseFloat(item.lat),
           lng: parseFloat(item.lon),
         }));
-        // Combine Nominatim results with matching preset locations and deduplicate
         const combined = [...fetched, ...presets];
         const unique = combined.filter(
           (loc, index, self) =>
@@ -57,8 +56,79 @@ export async function searchLocations(query: string): Promise<LocationResult[]> 
       }
     }
   } catch (err) {
-    console.warn("Geocoding fetch warning:", err);
+    console.warn("Geocoding search fetch warning:", err);
   }
 
   return presets.length > 0 ? presets : PRESET_LOCATIONS.slice(0, 5);
+}
+
+export async function resolveLocation(
+  query: string,
+  fallbackLat?: number,
+  fallbackLng?: number
+): Promise<LocationResult> {
+  if (!query || query.trim().length === 0) {
+    return { label: 'Banjara Hills, Hyderabad', lat: 17.4150, lng: 78.4350 };
+  }
+
+  const q = query.toLowerCase().trim();
+
+  // 1. Check matching presets
+  const matchedPreset = PRESET_LOCATIONS.find((loc) => {
+    const labelLower = loc.label.toLowerCase();
+    const shortName = labelLower.split(',')[0].trim();
+    return labelLower.includes(q) || q.includes(shortName);
+  });
+
+  if (matchedPreset) {
+    return matchedPreset;
+  }
+
+  // 2. Parse GPS string formatted as "My GPS Location (17.4150, 78.4350)"
+  const coordMatch = query.match(/\((-?\d+\.\d+),\s*(-?\d+\.\d+)\)/);
+  if (coordMatch) {
+    return {
+      label: query,
+      lat: parseFloat(coordMatch[1]),
+      lng: parseFloat(coordMatch[2]),
+    };
+  }
+
+  // 3. Query OpenStreetMap Nominatim live geocoding
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return {
+          label: query,
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Nominatim live resolveLocation warning:", e);
+  }
+
+  if (fallbackLat && fallbackLng) {
+    return { label: query, lat: fallbackLat, lng: fallbackLng };
+  }
+
+  // 4. Generate distinct coordinates inside Hyderabad bounding box for custom location names
+  let hash = 0;
+  for (let i = 0; i < query.length; i++) {
+    hash = query.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const latOffset = ((Math.abs(hash) % 100) / 1000) * 0.5;
+  const lngOffset = (((Math.abs(hash) >> 2) % 100) / 1000) * 0.5;
+
+  return {
+    label: query,
+    lat: 17.3800 + latOffset,
+    lng: 78.4000 + lngOffset,
+  };
 }

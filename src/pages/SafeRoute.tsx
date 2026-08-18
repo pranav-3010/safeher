@@ -19,7 +19,7 @@ import {
 import SafetyMapCanvas from '@/components/SafetyMapCanvas';
 import { Card, PageHeader, SectionCard } from '@/components/ui';
 import { api, type DetailedJourneyResponse } from '@/services/api';
-import { searchLocations, type LocationResult } from '@/services/geocoding';
+import { searchLocations, resolveLocation, type LocationResult } from '@/services/geocoding';
 import type { RouteOption } from '@/data/types';
 
 export default function SafeRoute() {
@@ -72,9 +72,11 @@ export default function SafeRoute() {
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setSourceLat(pos.coords.latitude);
-        setSourceLng(pos.coords.longitude);
-        setSourceName(`My GPS Location (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setSourceLat(lat);
+        setSourceLng(lng);
+        setSourceName(`My GPS Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
         setGpsLoading(false);
       },
       (err) => {
@@ -99,7 +101,7 @@ export default function SafeRoute() {
     setShowDestDropdown(false);
   };
 
-  // Perform Journey Analysis
+  // Perform Journey Analysis with Dynamic Geocoding
   const handleAnalyzeJourney = async () => {
     if (!sourceName.trim() || !destName.trim()) {
       setErrorMessage('Please specify both source and destination locations.');
@@ -108,19 +110,27 @@ export default function SafeRoute() {
 
     setAnalyzing(true);
     setErrorMessage(null);
-    setAnalysisProgress('Analyzing journey...');
+    setAnalysisProgress('Geocoding origin and destination locations...');
 
-    setTimeout(() => setAnalysisProgress('Fetching verified geographic information...'), 500);
-    setTimeout(() => setAnalysisProgress('Analyzing available safety data...'), 1200);
+    // Resolve exact coordinates for typed location strings
+    const resolvedSource = await resolveLocation(sourceName, sourceLat, sourceLng);
+    const resolvedDest = await resolveLocation(destName, destLat, destLng);
+
+    setSourceLat(resolvedSource.lat);
+    setSourceLng(resolvedSource.lng);
+    setDestLat(resolvedDest.lat);
+    setDestLng(resolvedDest.lng);
+
+    setAnalysisProgress('Querying PostGIS spatial database & emergency facilities...');
 
     try {
       const result = await api.analyzeJourney(
-        sourceName,
-        sourceLat,
-        sourceLng,
-        destName,
-        destLat,
-        destLng
+        resolvedSource.label,
+        resolvedSource.lat,
+        resolvedSource.lng,
+        resolvedDest.label,
+        resolvedDest.lat,
+        resolvedDest.lng
       );
       setJourneyResult(result);
     } catch (err: any) {
