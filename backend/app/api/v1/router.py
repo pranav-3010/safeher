@@ -9,6 +9,7 @@ from app.api.v1.endpoints.dynamic_risk import router as dynamic_risk_router
 from app.api.v1.endpoints.fusion import router as fusion_router
 from app.api.v1.endpoints.routes import router as routes_router
 from app.api.v1.endpoints.sos import router as sos_router
+from app.api.v1.endpoints.monitoring import router as monitoring_router
 
 api_v1_router = APIRouter()
 
@@ -23,6 +24,8 @@ api_v1_router.include_router(dynamic_risk_router, prefix="/risk", tags=["Phase 7
 api_v1_router.include_router(fusion_router, prefix="/risk", tags=["Phase 8 AI + ML + LLM Fusion"])
 api_v1_router.include_router(routes_router, prefix="/routes", tags=["Phase 9 Safe Route Engine"])
 api_v1_router.include_router(sos_router, prefix="/sos", tags=["Phase 11 SOS & Emergency Backend"])
+api_v1_router.include_router(monitoring_router, prefix="/monitoring", tags=["Phase 13 Monitoring & Feedback"])
+
 
 
 

@@ -9,6 +9,7 @@ import SafeHavens from '@/pages/SafeHavens';
 import Incidents from '@/pages/Incidents';
 import Community from '@/pages/Community';
 import Emergency from '@/pages/Emergency';
+import MonitoringDashboard from '@/pages/MonitoringDashboard';
 import Settings from '@/pages/Settings';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/community" element={<Community />} />
             <Route path="/emergency" element={<Emergency />} />
+            <Route path="/monitoring" element={<MonitoringDashboard />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -33,3 +35,4 @@ export default function App() {
     </AppProvider>
   );
 }
+

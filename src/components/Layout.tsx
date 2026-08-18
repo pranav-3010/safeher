@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import DemoModeControl from './DemoModeControl';
@@ -35,8 +36,10 @@ const NAV = [
 ];
 
 const SECONDARY = [
+  { to: '/monitoring', label: 'Monitoring (P13)', icon: Activity },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
+
 
 function NavItem({
   to,
