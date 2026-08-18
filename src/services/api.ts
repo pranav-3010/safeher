@@ -65,23 +65,26 @@ class RealFastApiApiService implements ApiService {
       if (res.ok) {
         const data = await res.json();
         if (data.geographic_areas && data.geographic_areas.length > 0) {
-          return data.geographic_areas.map((a: any, idx: number) => ({
-            id: a.id || `z-${idx}`,
-            name: a.name,
-            riskScore: Math.round((a.risk_index || 0.4) * 100),
-            riskLevel: (a.risk_index || 0.4) > 0.7 ? 'veryhigh' : (a.risk_index || 0.4) > 0.5 ? 'high' : 'moderate',
-            recentIncidents: 2,
-            lighting: 'Good street lights',
-            naturalSurveillance: 'High pedestrian traffic',
-            policeDistanceKm: 1.1,
-            hospitalDistanceKm: 0.5,
-            commercialActivity: 'Active market corridor',
-            communityRating: 4.2,
-            coordinates: { lat: 17.410, lng: 78.440 },
-            bounds: [[17.410, 78.435], [17.428, 78.455]],
-            riskFactors: ['Dense pedestrian congestion', 'Active commercial traffic'],
-            positiveFactors: ['High CCTV surveillance coverage', 'Nearby police station']
-          }));
+          return data.geographic_areas.map((a: any, idx: number) => {
+            const riskVal = a.risk_index || 0.45;
+            return {
+              id: a.id || `z-${idx}`,
+              name: a.name,
+              riskScore: Math.round(riskVal * 100),
+              riskLevel: riskVal > 0.7 ? 'veryhigh' : riskVal > 0.5 ? 'high' : riskVal > 0.3 ? 'moderate' : 'low',
+              recentIncidents: 2,
+              lighting: 'Good street lights',
+              naturalSurveillance: 'High pedestrian traffic',
+              policeDistanceKm: 1.1,
+              hospitalDistanceKm: 0.5,
+              commercialActivity: 'Active market corridor',
+              communityRating: 4.2,
+              coordinates: { lat: 17.410, lng: 78.440 },
+              bounds: [[17.410, 78.435], [17.428, 78.455]],
+              riskFactors: ['Dense pedestrian congestion', 'Active commercial traffic'],
+              positiveFactors: ['High CCTV surveillance coverage', 'Nearby police station']
+            };
+          });
         }
       }
     } catch (e) {
@@ -153,13 +156,13 @@ class RealFastApiApiService implements ApiService {
         if (data.incidents && data.incidents.length > 0) {
           return data.incidents.map((inc: any) => ({
             id: inc.id,
-            time: inc.occurred_at ? new Date(inc.occurred_at).toLocaleTimeString() : 'Recent',
+            time: inc.occurred_at ? new Date(inc.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
             timestamp: inc.occurred_at ? new Date(inc.occurred_at).getTime() : Date.now(),
-            location: inc.source_reference || 'Verified Geocoded Incident',
+            location: inc.source_reference || 'Verified Geocoded Location',
             type: inc.incident_type,
-            source: 'Official Police Portal',
+            source: 'Verified',
             riskImpact: Math.round((inc.severity || 0.7) * 20),
-            status: inc.verification_status || 'VERIFIED',
+            status: inc.verification_status === 'VERIFIED' ? 'Confirmed' : 'Reviewing',
             detail: inc.description || 'Verified geocoded incident in database.'
           }));
         }
