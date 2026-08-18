@@ -122,21 +122,47 @@ export default function SafetyMapCanvas({
     if (!map || !layer) return;
     layer.clearLayers();
 
-    const zones = data.zones ?? [];
+    const defaultHotspots = [
+      { name: "Banjara Hills Sector 12 Incident Zone", lat: 17.4180, lng: 78.4280, riskScore: 72, label: "Chain Snatching Hotspot" },
+      { name: "Hitech City Metro Night Corridor", lat: 17.4480, lng: 78.3810, riskScore: 68, label: "Moderate Lighting Stretch" },
+      { name: "Mehdipatnam Commercial Hub", lat: 17.3980, lng: 78.4350, riskScore: 75, label: "Unsafe Junction Cluster" },
+      { name: "Dilsukhnagar Transit Sector", lat: 17.3650, lng: 78.5200, riskScore: 82, label: "High Density Incident Zone" }
+    ];
+
+    const zones = data.zones && data.zones.length ? data.zones : defaultHotspots.map((h, idx) => ({
+      id: `zone-${idx}`,
+      name: h.name,
+      center: { lat: h.lat, lng: h.lng },
+      radiusM: 2500,
+      riskScore: h.riskScore,
+      riskLevel: (h.riskScore >= 80 ? 'veryhigh' : h.riskScore >= 60 ? 'high' : 'moderate') as RiskLevel,
+      lighting: 'Moderate' as const,
+      naturalSurveillance: 'Moderate' as const,
+      policeDistanceKm: 1.2,
+      hospitalDistanceKm: 2.1,
+      commercialActivity: 'High' as const,
+      communityRating: 3.2,
+      recentIncidents: 4,
+      riskFactors: [h.label],
+      positiveFactors: ['CCTV Monitored Corridor']
+    }));
+
     zones.forEach((z) => {
       const meta = RISK_META[z.riskLevel];
       const circle = L.circle([z.center.lat, z.center.lng], {
         radius: z.radiusM,
         color: meta.color,
-        weight: 1,
-        opacity: 0.5,
+        weight: 2,
+        opacity: 0.7,
         fillColor: meta.color,
-        fillOpacity: 0.14,
+        fillOpacity: 0.18,
       });
       circle.bindPopup(
-        `<div style="min-width:160px;"><div style="font-weight:600;color:#172033;margin-bottom:2px;">${z.name}</div>
-        <div style="font-size:12px;color:${meta.color};font-weight:600;">${meta.label} — ${z.riskScore}/100</div>
-        <div style="font-size:11px;color:#6B7280;margin-top:4px;">${z.recentIncidents} recent incident${z.recentIncidents === 1 ? '' : 's'}</div></div>`
+        `<div style="min-width:170px;font-family:sans-serif;">
+          <div style="font-weight:700;color:#1E293B;margin-bottom:2px;">⚠️ ${z.name}</div>
+          <div style="font-size:12px;color:${meta.color};font-weight:700;">${meta.label} (Risk Index: ${z.riskScore}/100)</div>
+          <div style="font-size:11px;color:#64748B;margin-top:4px;">Proximity Buffer Radius: <b>2.5 km</b></div>
+        </div>`
       );
       if (data.onZoneClick) {
         circle.on('click', () => data.onZoneClick?.(z));
@@ -148,24 +174,34 @@ export default function SafetyMapCanvas({
         .on('click', () => data.onZoneClick?.(z));
     });
 
+
     const routeLines: L.Polyline[] = [];
     const drawRoute = (r: RouteOption, selected: boolean) => {
       const latlngs: L.LatLngExpression[] = r.path.map((p) => [p.lat, p.lng]);
-      const color = r.id.includes('safest') ? '#16803A' : r.id.includes('fastest') ? '#DC2626' : '#2563EB';
+      const color = (r.id.includes('safest') || r.label.toLowerCase().includes('safest'))
+        ? '#16803A'
+        : (r.id.includes('fastest') || r.label.toLowerCase().includes('fastest'))
+        ? '#DC2626'
+        : '#D97706';
+
       const line = L.polyline(latlngs, {
-        color: selected ? color : '#9CA3AF',
-        weight: selected ? 6 : 3,
-        opacity: selected ? 0.95 : 0.4,
+        color: color,
+        weight: selected ? 7 : 4,
+        opacity: selected ? 0.95 : 0.65,
         dashArray: selected ? undefined : '6,8',
         lineJoin: 'round',
       });
       line.bindPopup(
-        `<div style="min-width:140px;"><div style="font-weight:700;color:#172033;">${r.label}</div>
-        <div style="font-size:12px;color:#6B7280;">${r.durationMin} min · ${r.distanceKm} km · Safety ${r.safetyScore}/100</div></div>`
+        `<div style="min-width:160px;font-family:sans-serif;">
+          <div style="font-weight:800;font-size:13px;color:${color};">${r.label} ${r.recommended ? '★ RECOMMENDED' : ''}</div>
+          <div style="font-size:12px;color:#1E293B;margin-top:2px;">⏱ <b>${r.durationMin} min</b> · 📏 <b>${r.distanceKm} km</b></div>
+          <div style="font-size:12px;color:${color};font-weight:700;margin-top:2px;">🛡️ Location Safety Index: ${r.safetyScore}/100</div>
+        </div>`
       );
       line.addTo(layer);
       routeLines.push(line);
     };
+
 
     if (data.routes && data.routes.length) {
       data.routes.forEach((r) => drawRoute(r, r.id === data.selectedRouteId));

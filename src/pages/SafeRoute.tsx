@@ -107,8 +107,14 @@ export default function SafeRoute() {
 
   const [routeAnalyzeResult, setRouteAnalyzeResult] = useState<any>(null);
 
+  // Auto-analyze default Hyderabad route on mount
+  useEffect(() => {
+    handleAnalyzeJourney();
+  }, []);
+
   // Perform Journey Analysis with Dynamic Geocoding and OSRM Real Road Routing
   const handleAnalyzeJourney = async () => {
+
     if (!sourceName.trim() || !destName.trim()) {
       setErrorMessage('Please specify both source and destination locations.');
       return;
