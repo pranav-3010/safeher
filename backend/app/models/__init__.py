@@ -26,6 +26,8 @@ from app.models.routing_analytics import (
     SystemLog,
 )
 
+from app.models.ml import MLModelMetadata
+
 __all__ = [
     "Base",
     "UUIDBaseModel",
@@ -48,4 +50,6 @@ __all__ = [
     "RouteAnalysis",
     "EmergencyEvent",
     "SystemLog",
+    "MLModelMetadata",
 ]
+

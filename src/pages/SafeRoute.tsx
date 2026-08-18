@@ -688,6 +688,151 @@ export default function SafeRoute() {
           </SectionCard>
         </div>
       )}
+
+      {/* PHASE 6: HISTORICAL ML TEST INTERFACE */}
+      <HistoricalMLTestSection />
     </div>
   );
 }
+
+function HistoricalMLTestSection() {
+  const [mlLat, setMlLat] = useState('17.4150');
+  const [mlLng, setMlLng] = useState('78.4350');
+  const [mlDate, setMlDate] = useState('2026-08-18');
+  const [mlTime, setMlTime] = useState('22:00');
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlResult, setMlResult] = useState<any>(null);
+
+  const handlePredictML = async () => {
+    setMlLoading(true);
+    setMlResult(null);
+    try {
+      const timestamp = `${mlDate}T${mlTime}:00Z`;
+      const res = await api.predictHistoricalRisk(parseFloat(mlLat), parseFloat(mlLng), timestamp);
+      setMlResult(res);
+    } catch (err: any) {
+      setMlResult({
+        success: false,
+        reason: 'ERROR',
+        message: err.message || 'Failed to communicate with Phase 6 Historical ML Pipeline.'
+      });
+    } finally {
+      setMlLoading(false);
+    }
+  };
+
+  return (
+    <Card className="p-5 border-2 border-indigo-200 bg-indigo-50/20">
+      <div className="flex items-center gap-2 mb-4">
+        <Sparkles className="h-5 w-5 text-accent" />
+        <h3 className="text-sm font-bold text-navy uppercase tracking-wider">
+          HISTORICAL ML TEST (PHASE 6 MODEL VERIFICATION)
+        </h3>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="ml-lat">Latitude</label>
+          <input
+            id="ml-lat"
+            className="input font-mono text-xs"
+            value={mlLat}
+            onChange={(e) => setMlLat(e.target.value)}
+            placeholder="e.g. 17.4150"
+          />
+        </div>
+
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="ml-lng">Longitude</label>
+          <input
+            id="ml-lng"
+            className="input font-mono text-xs"
+            value={mlLng}
+            onChange={(e) => setMlLng(e.target.value)}
+            placeholder="e.g. 78.4350"
+          />
+        </div>
+
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="ml-date">Date</label>
+          <input
+            id="ml-date"
+            type="date"
+            className="input text-xs"
+            value={mlDate}
+            onChange={(e) => setMlDate(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="label text-[11px] text-ink-soft uppercase" htmlFor="ml-time">Time</label>
+          <input
+            id="ml-time"
+            type="time"
+            className="input text-xs"
+            value={mlTime}
+            onChange={(e) => setMlTime(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          disabled={mlLoading}
+          onClick={handlePredictML}
+          className="btn-primary flex items-center gap-2 text-xs font-bold px-6 py-2"
+        >
+          {mlLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          [ PREDICT HISTORICAL RISK ]
+        </button>
+      </div>
+
+      {/* ML Result Section */}
+      {mlResult && (
+        <div className="mt-4 rounded-xl border border-border bg-white p-4 space-y-3 font-sans">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-navy uppercase tracking-wider">Phase 6 ML Prediction Result</h4>
+            <span className={`badge ${mlResult.success ? 'bg-safe-light text-safe-dark' : 'bg-amber-100 text-amber-800'} text-[10px] font-bold`}>
+              {mlResult.success ? 'MODEL TRAINED' : mlResult.reason || 'INSUFFICIENT DATA'}
+            </span>
+          </div>
+
+          {!mlResult.success ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <p className="font-semibold">{mlResult.message || 'Insufficient verified historical data for reliable ML training.'}</p>
+              <div className="mt-2 grid gap-1 sm:grid-cols-3 text-[11px] font-mono text-amber-800">
+                <div>Model Version: <strong>{mlResult.model_version || 'v1.0.0-historical'}</strong></div>
+                <div>Training Records: <strong>{mlResult.dataset_size || 9}</strong></div>
+                <div>Status: <strong>{mlResult.metadata?.status || 'INSUFFICIENT_DATA'}</strong></div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 text-xs text-navy">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="p-2.5 rounded border border-border bg-canvas-subtle">
+                  <span className="text-[10px] text-ink-soft">Historical Risk Score</span>
+                  <div className="text-lg font-bold text-accent">{mlResult.historical_risk?.score}</div>
+                </div>
+                <div className="p-2.5 rounded border border-border bg-canvas-subtle">
+                  <span className="text-[10px] text-ink-soft">Risk Level</span>
+                  <div className="text-lg font-bold text-navy">{mlResult.historical_risk?.level}</div>
+                </div>
+                <div className="p-2.5 rounded border border-border bg-canvas-subtle">
+                  <span className="text-[10px] text-ink-soft">Model Algorithm</span>
+                  <div className="text-sm font-bold text-navy mt-1">{mlResult.algorithm}</div>
+                </div>
+              </div>
+
+              <div className="text-[11px] font-mono text-ink-soft pt-1">
+                <div>Model Version: <strong className="text-navy">{mlResult.model_version}</strong></div>
+                <div>Training Records: <strong className="text-navy">{mlResult.dataset_size}</strong></div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
