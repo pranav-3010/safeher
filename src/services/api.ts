@@ -23,8 +23,13 @@ import {
 import { user as baseUser } from '@/data/users';
 import { safetySummary as baseSummary } from '@/data/summary';
 
-// Get API Base URL from environment variables or fallback to localhost:8000
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+// Live Public HTTPS Backend URL
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://sixty-suits-say.loca.lt').replace(/\/$/, '');
+
+const DEFAULT_HEADERS = {
+  'Content-Type': 'application/json',
+  'bypass-tunnel-reminder': 'true'
+};
 
 export interface ApiService {
   getSafetyZones(): Promise<SafetyZone[]>;
@@ -56,7 +61,7 @@ function clone<T>(v: T): T {
 class RealFastApiApiService implements ApiService {
   async getSafetyZones(): Promise<SafetyZone[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/map/geographic-areas`);
+      const res = await fetch(`${API_BASE_URL}/api/v1/map/geographic-areas`, { headers: DEFAULT_HEADERS });
       if (res.ok) {
         const data = await res.json();
         if (data.geographic_areas && data.geographic_areas.length > 0) {
@@ -87,7 +92,7 @@ class RealFastApiApiService implements ApiService {
 
   async getSafetySummary(): Promise<SafetySummary> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/map/crime-density?latitude=17.3850&longitude=78.4867&radius=1000`);
+      const res = await fetch(`${API_BASE_URL}/api/v1/map/crime-density?latitude=17.3850&longitude=78.4867&radius=1000`, { headers: DEFAULT_HEADERS });
       if (res.ok) {
         const data = await res.json();
         const base = clone(baseSummary);
@@ -106,7 +111,7 @@ class RealFastApiApiService implements ApiService {
 
   async getSafeHavens(category?: string): Promise<SafeHaven[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/map/emergency-services/nearby?latitude=17.3850&longitude=78.4867&radius=10000`);
+      const res = await fetch(`${API_BASE_URL}/api/v1/map/emergency-services/nearby?latitude=17.3850&longitude=78.4867&radius=10000`, { headers: DEFAULT_HEADERS });
       if (res.ok) {
         const data = await res.json();
         if (data.facilities && data.facilities.length > 0) {
@@ -142,7 +147,7 @@ class RealFastApiApiService implements ApiService {
 
   async getIncidents(): Promise<Incident[]> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/map/incidents/nearby?latitude=17.3850&longitude=78.4867&radius=50000`);
+      const res = await fetch(`${API_BASE_URL}/api/v1/map/incidents/nearby?latitude=17.3850&longitude=78.4867&radius=50000`, { headers: DEFAULT_HEADERS });
       if (res.ok) {
         const data = await res.json();
         if (data.incidents && data.incidents.length > 0) {
@@ -194,7 +199,7 @@ class RealFastApiApiService implements ApiService {
   async askAISafetyQuestion(question: string, lat: number = 17.3850, lng: number = 78.4867): Promise<any> {
     const res = await fetch(`${API_BASE_URL}/api/v1/ai/safety-question`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: DEFAULT_HEADERS,
       body: JSON.stringify({
         latitude: lat,
         longitude: lng,
