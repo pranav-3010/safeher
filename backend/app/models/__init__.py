@@ -27,6 +27,7 @@ from app.models.routing_analytics import (
 )
 
 from app.models.ml import MLModelMetadata
+from app.models.sos import SOSEvent, SOSLocationUpdate, EmergencyContact
 
 __all__ = [
     "Base",
@@ -51,5 +52,9 @@ __all__ = [
     "EmergencyEvent",
     "SystemLog",
     "MLModelMetadata",
+    "SOSEvent",
+    "SOSLocationUpdate",
+    "EmergencyContact",
 ]
+
 

@@ -16,11 +16,22 @@ from app.core.exceptions import (
 from app.api.v1.router import api_v1_router
 
 
+from app.database.session import engine
+from app.models.base_model import Base
+import app.models  # Ensure all SQLAlchemy models are registered
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode.")
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables verified and initialized.")
+    except Exception as e:
+        logger.warning(f"Database table initialization warning: {e}")
     yield
     logger.info(f"Shutting down {settings.APP_NAME}.")
+
 
 
 def create_application() -> FastAPI:

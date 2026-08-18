@@ -1,304 +1,500 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Siren, Phone, Share2, ShieldPlus, X, Mic, MicOff, Wifi, WifiOff, Check, MapPin, AlertTriangle } from 'lucide-react';
-import { Card, PageHeader, SectionCard } from '@/components/ui';
+import { Siren, Phone, Share2, ShieldPlus, X, MapPin, AlertTriangle, UserPlus, Users, Loader2, RefreshCw, ShieldAlert, CheckCircle } from 'lucide-react';
+import { Card, PageHeader } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { api } from '@/services/api';
-import { user as userData } from '@/data/users';
-
-function HoldSOSButton({ onActivate }: { onActivate: () => void }) {
-  const [holding, setHolding] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const timerRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const startRef = useRef<number>(0);
-  const HOLD_MS = 2000;
-
-  const startHold = () => {
-    setHolding(true);
-    startRef.current = performance.now();
-    const tick = () => {
-      const elapsed = performance.now() - startRef.current;
-      const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
-      setProgress(pct);
-      if (pct >= 100) {
-        finish();
-        return;
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    timerRef.current = window.setTimeout(finish, HOLD_MS);
-  };
-
-  const finish = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    setHolding(false);
-    setProgress(100);
-    if (performance.now() - startRef.current >= HOLD_MS - 50) {
-      onActivate();
-    }
-    setTimeout(() => setProgress(0), 400);
-  };
-
-  const cancel = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    setHolding(false);
-    setProgress(0);
-  };
-
-  return (
-    <div className="flex flex-col items-center">
-      <button
-        type="button"
-        onPointerDown={startHold}
-        onPointerUp={cancel}
-        onPointerLeave={cancel}
-        onPointerCancel={cancel}
-        className="relative flex h-40 w-40 select-none items-center justify-center rounded-full bg-danger text-white shadow-[0_8px_24px_-4px_rgba(185,28,28,0.45)] transition-transform active:scale-95 focus-visible:ring-danger"
-        aria-label="Hold for 2 seconds to activate SOS"
-      >
-        {holding && (
-          <span
-            className="absolute inset-0 rounded-full border-4 border-white/40"
-            style={{
-              background: `conic-gradient(rgba(255,255,255,0.55) ${progress * 3.6}deg, transparent 0deg)`,
-              mask: 'radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 8px))',
-              WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 8px))',
-            }}
-            aria-hidden="true"
-          />
-        )}
-        <span className="flex flex-col items-center">
-          <Siren className="h-10 w-10" aria-hidden="true" />
-          <span className="mt-1.5 text-lg font-bold tracking-wide">SOS</span>
-        </span>
-      </button>
-      <p className="mt-4 text-sm font-medium text-ink-soft">
-        {holding ? `Hold for ${((2000 - (progress / 100) * 2000) / 1000).toFixed(1)}s…` : 'Hold for 2 seconds'}
-      </p>
-    </div>
-  );
-}
-
-function Checklist({ items, done }: { items: string[]; done: boolean }) {
-  return (
-    <ul className="space-y-2.5">
-      {items.map((item) => (
-        <li key={item} className="flex items-center gap-2.5 text-sm">
-          <span
-            className={`flex h-5 w-5 flex-none items-center justify-center rounded-full ${
-              done ? 'bg-safe text-white' : 'bg-canvas-subtle text-ink-soft'
-            }`}
-            aria-hidden="true"
-          >
-            {done && <Check className="h-3 w-3" />}
-          </span>
-          <span className={done ? 'text-ink' : 'text-ink-soft'}>{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export default function Emergency() {
-  const { sosActive, setSosActive, online, setOnline, scenario, setScenario, notify } = useApp();
-  const [listening, setListening] = useState(false);
-  const [voiceDetected, setVoiceDetected] = useState(false);
+  const { notify } = useApp();
+
+  // SOS State
+  const [sosActive, setSosActive] = useState(false);
+  const [activeSosData, setActiveSosData] = useState<any>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<'IDLE' | 'ACQUIRING' | 'ACQUIRED' | 'DENIED'>('IDLE');
+  const [currentCoords, setCurrentCoords] = useState<{ lat: number | null; lng: number | null; accuracy: number | null }>({
+    lat: null,
+    lng: null,
+    accuracy: null
+  });
+
+  // Emergency Contacts State
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactRelation, setContactRelation] = useState('Family');
+  const [addingContact, setAddingContact] = useState(false);
+
+  // Emergency Operator Dashboard State
+  const [operatorEvents, setOperatorEvents] = useState<any[]>([]);
+  const [loadingOperator, setLoadingOperator] = useState(false);
+
+  // Watch position reference for active tracking
+  const watchIdRef = useRef<number | null>(null);
+
+  // Fetch initial contacts & active operator events
+  const loadContacts = async () => {
+    try {
+      const res = await api.getEmergencyContactsList();
+      if (res?.contacts) {
+        setContacts(res.contacts);
+      }
+    } catch (e) {
+      console.warn("Failed to load emergency contacts:", e);
+    }
+  };
+
+  const loadOperatorEvents = async () => {
+    setLoadingOperator(true);
+    try {
+      const res = await api.getActiveSOSEvents();
+      if (res?.active_events) {
+        setOperatorEvents(res.active_events);
+      }
+    } catch (e) {
+      console.warn("Failed to load active operator events:", e);
+    } finally {
+      setLoadingOperator(false);
+    }
+  };
 
   useEffect(() => {
-    if (scenario === 'voice-sos') {
-      setVoiceDetected(true);
-      setSosActive(true);
-    }
-  }, [scenario, setSosActive]);
+    loadContacts();
+    loadOperatorEvents();
+  }, []);
 
-  const activate = async () => {
-    notify('SOS activated. Emergency contacts are being notified.', 'danger');
-    await api.triggerSOS();
-    setSosActive(true);
+  // Continuous background location tracking during ACTIVE SOS
+  useEffect(() => {
+    if (sosActive && activeSosData?.sos_id && navigator.geolocation) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        async (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setCurrentCoords({ lat: latitude, lng: longitude, accuracy });
+          try {
+            await api.updateSOSLocation(activeSosData.sos_id, latitude, longitude, accuracy);
+          } catch (e) {
+            console.warn("Failed to stream continuous SOS location update:", e);
+          }
+        },
+        (error) => {
+          console.warn("Location tracking error during SOS:", error.message);
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+      );
+    } else if (!sosActive && watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, [sosActive, activeSosData?.sos_id]);
+
+  // Request browser geolocation permission & coordinates
+  const acquireLocation = (): Promise<{ lat: number | null; lng: number | null; accuracy: number | null }> => {
+    return new Promise((resolve) => {
+      setLocationStatus('ACQUIRING');
+      if (!navigator.geolocation) {
+        setLocationStatus('DENIED');
+        resolve({ lat: null, lng: null, accuracy: null });
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocationStatus('ACQUIRED');
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+          setCurrentCoords(coords);
+          resolve(coords);
+        },
+        (err) => {
+          console.warn("Geolocation permission error or denied:", err.message);
+          setLocationStatus('DENIED');
+          notify('Location permission denied or unavailable. SOS created without exact coordinates.', 'warning');
+          resolve({ lat: null, lng: null, accuracy: null });
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
   };
 
-  const cancelSos = () => {
-    setSosActive(false);
-    setVoiceDetected(false);
-    setScenario('normal');
-    notify('SOS cancelled.', 'info');
+  // Trigger SOS Handler after modal confirmation
+  const handleConfirmActivateSOS = async () => {
+    setShowConfirmModal(false);
+    setLoading(true);
+
+    const coords = await acquireLocation();
+
+    try {
+      const response = await api.triggerSOSEvent(coords.lat || undefined, coords.lng || undefined, coords.accuracy || undefined);
+      if (response?.sos_id) {
+        setActiveSosData(response);
+        setSosActive(true);
+        notify(response.already_active ? 'Active SOS request retrieved.' : '🚨 EMERGENCY SOS ACTIVATED', 'danger');
+        loadOperatorEvents();
+      } else {
+        notify('Emergency request could not be confirmed. Check connection.', 'danger');
+      }
+    } catch (err: any) {
+      notify(`Emergency request failed: ${err.message}`, 'danger');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const toggleListen = () => {
-    if (listening) {
-      setListening(false);
-      return;
+  // Cancel SOS Handler
+  const handleConfirmCancelSOS = async () => {
+    if (!activeSosData?.sos_id) return;
+    setLoading(true);
+    try {
+      await api.cancelSOS(activeSosData.sos_id, cancelReason || 'User cancelled SOS');
+      setSosActive(false);
+      setActiveSosData(null);
+      setShowCancelModal(false);
+      setCancelReason('');
+      notify('SOS emergency alert cancelled.', 'info');
+      loadOperatorEvents();
+    } catch (err: any) {
+      notify(`Failed to cancel SOS: ${err.message}`, 'danger');
+    } finally {
+      setLoading(false);
     }
-    setListening(true);
-    notify('Voice SOS listening for "Code Red".', 'info');
-    setTimeout(() => {
-      setListening(false);
-      setVoiceDetected(true);
-      setSosActive(true);
-      notify('Voice SOS detected — "Code Red" recognized.', 'danger');
-    }, 2500);
+  };
+
+  // Add Emergency Contact Handler
+  const handleAddContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactName || !contactPhone) return;
+    setAddingContact(true);
+    try {
+      const res = await api.addEmergencyContact({
+        name: contactName,
+        phone_number: contactPhone,
+        relationship: contactRelation,
+        is_primary: contacts.length === 0
+      });
+      if (res?.id) {
+        setContactName('');
+        setContactPhone('');
+        notify('Emergency contact added successfully.', 'success');
+        loadContacts();
+      }
+    } catch (err: any) {
+      notify(`Failed to add contact: ${err.message}`, 'danger');
+    } finally {
+      setAddingContact(false);
+    }
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Emergency Center" subtitle="Quick access to emergency assistance." />
+      <PageHeader title="Emergency SOS Center" subtitle="Real-time emergency alert dispatcher and location tracking system." />
+
+      {/* CONFIRM ACTIVATION MODAL */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 border-2 border-danger">
+            <div className="flex items-center gap-3 text-danger font-bold text-lg">
+              <ShieldAlert className="h-7 w-7 animate-bounce" />
+              CONFIRM EMERGENCY SOS ACTIVATION
+            </div>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Are you sure you want to activate Emergency SOS? Your location will be captured and broadcasted to emergency responders and authorized contacts.
+            </p>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="btn-secondary w-full justify-center py-2.5 font-bold"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmActivateSOS}
+                className="btn-danger w-full justify-center py-2.5 font-bold bg-danger hover:bg-danger-dark animate-pulse"
+              >
+                ACTIVATE SOS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM CANCELLATION MODAL */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 border-2 border-border">
+            <div className="flex items-center gap-3 text-navy font-bold text-lg">
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+              CANCEL ACTIVE SOS REQUEST?
+            </div>
+            <p className="text-sm text-ink-soft">
+              Please state a reason for cancelling this active emergency request:
+            </p>
+            <input
+              type="text"
+              placeholder="e.g. Accidental trigger / Reached safe location"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:ring-2 focus:ring-navy"
+            />
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(false)}
+                className="btn-secondary w-full justify-center py-2.5 font-bold"
+              >
+                KEEP ACTIVE
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelSOS}
+                className="btn-danger w-full justify-center py-2.5 font-bold bg-zinc-800 hover:bg-zinc-900"
+              >
+                CANCEL SOS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* SOS panel */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold text-navy">Emergency Assistance</h2>
+        {/* MAIN SOS PANEL */}
+        <Card className="p-6 border-2 border-danger-light">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-navy uppercase tracking-wider flex items-center gap-2">
+              <Siren className="h-5 w-5 text-danger" />
+              EMERGENCY SOS DISPATCHER
+            </h2>
+            {sosActive && (
+              <span className="badge bg-danger text-white font-bold animate-pulse">
+                🚨 SOS ACTIVE
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-ink-soft">
-            If you feel unsafe, activate SOS. Your location and emergency contacts will be notified immediately.
+            Press to dispatch an emergency alert with real-time location capture.
           </p>
 
           {!sosActive ? (
-            <div className="mt-6 flex flex-col items-center rounded-[10px] border border-border bg-canvas-subtle/60 py-8">
-              <HoldSOSButton onActivate={activate} />
+            <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-danger/30 bg-danger-light/20 py-10 px-4">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setShowConfirmModal(true)}
+                className="group relative flex h-44 w-44 select-none flex-col items-center justify-center rounded-full bg-danger text-white shadow-[0_10px_30px_rgba(220,38,38,0.5)] transition-all hover:scale-105 active:scale-95 focus:outline-none"
+              >
+                {loading ? (
+                  <Loader2 className="h-12 w-12 animate-spin" />
+                ) : (
+                  <>
+                    <Siren className="h-12 w-12 group-hover:animate-bounce" />
+                    <span className="mt-2 text-2xl font-black tracking-wider">SOS</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/80">EMERGENCY</span>
+                  </>
+                )}
+              </button>
+              <p className="mt-4 text-xs font-semibold text-ink-soft">
+                Tap button to open SOS activation confirmation.
+              </p>
             </div>
           ) : (
-            <div className="mt-6 rounded-[10px] border-2 border-danger/30 bg-danger-light/40 p-6">
-              <div className="flex items-center gap-2.5">
-                <span className="relative flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-danger" />
-                </span>
-                <h3 className="text-base font-bold uppercase tracking-wide text-danger-dark">SOS Activated</h3>
-              </div>
-              <div className="mt-4">
-                <Checklist
-                  items={[
-                    'Location acquired',
-                    'Emergency contacts notified',
-                    'Nearby help identified',
-                  ]}
-                  done={true}
-                />
-              </div>
-              <div className="mt-4 rounded-[8px] bg-canvas p-3 text-xs text-ink-soft">
-                <span className="flex items-center gap-1.5 font-medium text-navy">
-                  <MapPin className="h-3.5 w-3.5 text-accent" />
-                  Live location
-                </span>
-                <span className="mt-1 block font-mono">
-                  {userData.currentLocation.lat.toFixed(4)}, {userData.currentLocation.lng.toFixed(4)}
+            <div className="mt-6 rounded-2xl border-2 border-danger bg-danger-light/30 p-6 space-y-4 font-sans">
+              <div className="flex items-center justify-between border-b border-danger/20 pb-3">
+                <div className="flex items-center gap-2 text-danger-dark font-bold text-base">
+                  <span className="relative flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-danger" />
+                  </span>
+                  🚨 SOS ACTIVE
+                </div>
+                <span className="text-xs font-mono font-bold text-ink-soft">
+                  ID: {activeSosData?.sos_id?.slice(0, 13)}...
                 </span>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <a href="tel:100" className="btn-danger col-span-2">
+
+              {/* LOCATION & STATUS GRID */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-xl bg-white p-3 border border-danger/20 space-y-1">
+                  <span className="text-[10px] font-bold text-ink-soft uppercase">Status</span>
+                  <div className="font-bold text-danger text-sm">{activeSosData?.status || 'ACTIVE'}</div>
+                </div>
+
+                <div className="rounded-xl bg-white p-3 border border-danger/20 space-y-1">
+                  <span className="text-[10px] font-bold text-ink-soft uppercase">Location Status</span>
+                  <div className="font-bold text-emerald-700 flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {activeSosData?.location?.status_text || 'AVAILABLE ✓'}
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white p-3 border border-danger/20 space-y-1 col-span-2">
+                  <span className="text-[10px] font-bold text-ink-soft uppercase">Notification Provider State</span>
+                  <div className="flex items-center justify-between">
+                    <span className="badge bg-zinc-800 text-white font-bold text-[10px]">
+                      ● {activeSosData?.notification?.status || 'NOT_CONFIGURED'}
+                    </span>
+                    <span className="text-[10px] text-ink-soft italic">
+                      {activeSosData?.notification?.message || 'Emergency notification service is not configured.'}
+                    </span>
+                  </div>
+                </div>
+
+                {currentCoords.lat !== null && (
+                  <div className="rounded-xl bg-white p-3 border border-danger/20 col-span-2 space-y-1">
+                    <span className="text-[10px] font-bold text-ink-soft uppercase">Live Coordinates Stream</span>
+                    <div className="font-mono text-xs font-bold text-navy">
+                      {currentCoords.lat.toFixed(5)}, {currentCoords.lng?.toFixed(5)} (±{currentCoords.accuracy?.toFixed(1)}m)
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-900 italic">
+                ℹ️ <strong>Safety Disclaimer</strong>: {activeSosData?.scientific_disclaimer || "Emergency request created. System never falsely claims emergency services were contacted unless verified."}
+              </div>
+
+              {/* SOS QUICK ACTIONS */}
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <a href="tel:100" className="btn-danger col-span-2 justify-center font-bold py-2.5">
                   <Phone className="h-4 w-4" />
-                  Call Police — 100
+                  CALL POLICE EMERGENCY — 100
                 </a>
-                <button type="button" className="btn-secondary" onClick={() => notify('Location link copied to clipboard.', 'success')}>
-                  <Share2 className="h-4 w-4" />
+                <button type="button" className="btn-secondary justify-center text-xs font-bold" onClick={() => notify('Live location copied to clipboard.', 'success')}>
+                  <Share2 className="h-3.5 w-3.5" />
                   Share Location
                 </button>
-                <Link to="/safe-havens" className="btn-secondary">
-                  <ShieldPlus className="h-4 w-4" />
-                  Safe Havens
-                </Link>
-                <button type="button" onClick={cancelSos} className="btn-ghost col-span-2">
+                <a href="tel:112" className="btn-secondary justify-center text-xs font-bold">
+                  <ShieldPlus className="h-3.5 w-3.5" />
+                  Call 112 Helpline
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(true)}
+                  className="btn-secondary col-span-2 justify-center text-xs font-bold bg-zinc-800 text-white hover:bg-zinc-900"
+                >
                   <X className="h-4 w-4" />
-                  Cancel SOS
+                  [ CANCEL SOS ]
                 </button>
               </div>
             </div>
           )}
         </Card>
 
+        {/* RIGHT COLUMN: CONTACTS & OPERATOR DASHBOARD */}
         <div className="space-y-6">
-          {/* Voice SOS */}
+          {/* TRUSTED EMERGENCY CONTACTS */}
           <Card className="p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-navy">Voice SOS</h2>
-                <p className="mt-1 text-sm text-ink-soft">Speak your emergency phrase to trigger SOS hands-free.</p>
-              </div>
-              <span className="badge bg-safe-light text-safe-dark">
-                <span className="h-2 w-2 rounded-full bg-safe" />
-                Enabled
-              </span>
-            </div>
-            <div className="mt-4 rounded-[8px] border border-border bg-canvas-subtle/60 p-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-ink-soft">Emergency phrase</span>
-                <span className="rounded-[6px] bg-navy px-2.5 py-0.5 font-mono text-sm font-semibold text-white">"{userData.voicePhrase}"</span>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm text-ink-soft">
-                  Microphone
-                  <span className={`badge ${listening ? 'bg-danger-light text-danger-dark' : 'bg-canvas-subtle text-ink-soft'}`}>
-                    <span className={`h-2 w-2 rounded-full ${listening ? 'bg-danger animate-pulse' : 'bg-ink-soft'}`} />
-                    {listening ? 'Listening' : 'Off'}
-                  </span>
-                </span>
-                <button type="button" onClick={toggleListen} className={listening ? 'btn-danger !py-1.5 !text-xs' : 'btn-secondary !py-1.5 !text-xs'}>
-                  {listening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                  {listening ? 'Stop' : 'Start listening'}
-                </button>
-              </div>
-            </div>
-            {voiceDetected && (
-              <div className="mt-3 rounded-[8px] border border-danger/30 bg-danger-light/50 p-3 animate-fade-in">
-                <p className="flex items-center gap-2 text-sm font-semibold text-danger-dark">
-                  <AlertTriangle className="h-4 w-4" />
-                  Voice SOS Detected
-                </p>
-                <p className="mt-1 text-xs text-ink">Emergency procedure started.</p>
-              </div>
-            )}
-            <p className="mt-3 text-xs text-ink-soft">
-              Uses on-device speech recognition. Enable microphone permission to activate live detection.
+            <h2 className="text-lg font-bold text-navy flex items-center gap-2">
+              <Users className="h-5 w-5 text-navy" />
+              TRUSTED EMERGENCY CONTACTS
+            </h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Configure personal trusted contacts notified during SOS events.
             </p>
+
+            <form onSubmit={handleAddContact} className="mt-4 grid grid-cols-3 gap-2">
+              <input
+                type="text"
+                placeholder="Name"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                className="px-3 py-1.5 border border-border rounded-lg text-xs"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Phone (+91...)"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                className="px-3 py-1.5 border border-border rounded-lg text-xs"
+                required
+              />
+              <button
+                type="submit"
+                disabled={addingContact}
+                className="btn-primary text-xs font-bold py-1.5 justify-center"
+              >
+                {addingContact ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                Add
+              </button>
+            </form>
+
+            <div className="mt-4 space-y-2 max-h-48 overflow-y-auto">
+              {contacts.length === 0 ? (
+                <div className="text-xs text-ink-soft italic p-3 bg-canvas-subtle rounded-lg text-center">
+                  No emergency contacts configured yet. Add your trusted contacts above.
+                </div>
+              ) : (
+                contacts.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-white text-xs">
+                    <div>
+                      <div className="font-bold text-navy flex items-center gap-1.5">
+                        {c.name}
+                        {c.is_primary && <span className="badge bg-blue-100 text-blue-800 text-[9px] font-bold">PRIMARY</span>}
+                      </div>
+                      <div className="text-ink-soft text-[11px]">{c.phone_number} ({c.relationship})</div>
+                    </div>
+                    <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  </div>
+                ))
+              )}
+            </div>
           </Card>
 
-          {/* Offline connectivity */}
-          <Card className="p-6">
-            <h2 className="text-lg font-semibold text-navy">Emergency Connectivity</h2>
-            <div className="mt-3 flex items-center justify-between rounded-[8px] border border-border p-3">
-              <span className="flex items-center gap-2 text-sm text-ink">
-                {online ? <Wifi className="h-4 w-4 text-safe-dark" /> : <WifiOff className="h-4 w-4 text-danger-dark" />}
-                Internet
-              </span>
-              <span className={`badge ${online ? 'bg-safe-light text-safe-dark' : 'bg-danger-light text-danger-dark'}`}>
-                <span className={`h-2 w-2 rounded-full ${online ? 'bg-safe' : 'bg-danger'}`} />
-                {online ? 'Connected' : 'Unavailable'}
-              </span>
+          {/* PROTECTED EMERGENCY OPERATOR MONITOR DASHBOARD */}
+          <Card className="p-6 border border-zinc-300 bg-zinc-50/50">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-bold text-navy uppercase tracking-wider flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-zinc-700" />
+                EMERGENCY OPERATOR MONITOR (PHASE 11)
+              </h2>
+              <button
+                type="button"
+                onClick={loadOperatorEvents}
+                className="p-1 text-ink-soft hover:text-navy"
+                title="Refresh Active SOS Events"
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingOperator ? 'animate-spin' : ''}`} />
+              </button>
             </div>
 
-            {!online && (
-              <div className="mt-3 rounded-[8px] border border-moderate/30 bg-moderate-light/40 p-3 text-sm text-moderate-dark">
-                Mobile emergency fallback available.
-              </div>
-            )}
-
-            <p className="mt-3 text-xs leading-relaxed text-ink-soft">
-              On supported mobile implementations, emergency alerts can fall back to cellular SMS when internet connectivity is unavailable. A standard web browser cannot silently send SMS without appropriate permissions or integration.
+            <p className="text-xs text-ink-soft mb-3">
+              Protected live queue of active emergency SOS alerts for authorized dispatch operators.
             </p>
 
-            <div className="mt-4 rounded-[8px] bg-navy p-4 font-mono text-xs leading-relaxed text-white">
-              <div className="text-white/60">SOS ALERT</div>
-              <div className="mt-1">Possible emergency.</div>
-              <div className="mt-2 text-white/60">Location:</div>
-              <div>{userData.currentLocation.lat.toFixed(4)}, {userData.currentLocation.lng.toFixed(4)}</div>
-              <div className="mt-2 break-all text-accent-300">
-                maps.google.com/?q={userData.currentLocation.lat.toFixed(4)},{userData.currentLocation.lng.toFixed(4)}
-              </div>
+            <div className="space-y-2 text-xs">
+              {operatorEvents.length === 0 ? (
+                <div className="p-4 bg-white border border-border rounded-xl text-center text-ink-soft italic">
+                  No active emergency SOS alerts currently in queue.
+                </div>
+              ) : (
+                operatorEvents.map((evt) => (
+                  <div key={evt.sos_id} className="p-3 bg-white border-2 border-danger/30 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="text-danger text-xs truncate">SOS #{evt.sos_id.slice(0, 8)}</span>
+                      <span className="badge bg-danger text-white text-[9px] font-bold">{evt.status}</span>
+                    </div>
+                    <div className="text-[11px] text-ink-soft">
+                      User: <strong>{evt.user_reference}</strong>
+                    </div>
+                    <div className="text-[11px] text-ink-soft">
+                      Location: <strong>{evt.location_text}</strong>
+                    </div>
+                    <div className="text-[10px] text-ink-soft">
+                      Notification: <strong>{evt.notification_status}</strong> ({evt.notification_provider})
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-
-            <button
-              type="button"
-              className="btn-ghost mt-3 w-full !text-xs"
-              onClick={() => {
-                setOnline(!online);
-                notify(online ? 'Simulating offline mode.' : 'Back online.', online ? 'warning' : 'success');
-              }}
-            >
-              Simulate {online ? 'offline' : 'online'} (demo)
-            </button>
           </Card>
         </div>
       </div>
