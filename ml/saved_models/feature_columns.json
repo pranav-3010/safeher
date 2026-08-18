@@ -1,0 +1,13 @@
+[
+  "hour",
+  "day_of_week",
+  "day_of_month",
+  "month",
+  "is_weekend",
+  "is_night",
+  "dist_police_km",
+  "dist_hospital_km",
+  "dist_nearest_crime_km",
+  "crime_density_1km",
+  "gis_area_risk"
+]

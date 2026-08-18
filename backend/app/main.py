@@ -1,6 +1,9 @@
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -13,8 +16,6 @@ from app.core.exceptions import (
 from app.api.v1.router import api_v1_router
 
 
-from contextlib import asynccontextmanager
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode.")
@@ -25,7 +26,7 @@ async def lifespan(app: FastAPI):
 def create_application() -> FastAPI:
     """
     Application factory for the Women Safety Risk-Zone Backend.
-    Sets up FastAPI instance, middleware, CORS, routers, and exception handlers.
+    Sets up FastAPI instance, middleware, CORS, routers, static files, and exception handlers.
     """
     app = FastAPI(
         title=settings.APP_NAME,
@@ -54,8 +55,12 @@ def create_application() -> FastAPI:
     # Include Versioned API Routers
     app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
 
-    return app
+    # Mount Static Files for Interactive Leaflet Frontend Map
+    static_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), "../static"))
+    if os.path.exists(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
 
+    return app
 
 
 app = create_application()

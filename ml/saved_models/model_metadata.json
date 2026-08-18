@@ -1,0 +1,40 @@
+{
+  "selected_model": "LogisticRegression",
+  "model_save_path": "/Users/pranav/.gemini/antigravity/scratch/safeher/ml/saved_models/safety_model.pkl",
+  "feature_columns": [
+    "hour",
+    "day_of_week",
+    "day_of_month",
+    "month",
+    "is_weekend",
+    "is_night",
+    "dist_police_km",
+    "dist_hospital_km",
+    "dist_nearest_crime_km",
+    "crime_density_1km",
+    "gis_area_risk"
+  ],
+  "training_timestamp": "2026-08-18T07:51:53.839018+00:00",
+  "training_samples_count": 6,
+  "best_metrics": {
+    "model_name": "LogisticRegression",
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "precision_weighted": 1.0,
+    "recall_weighted": 1.0,
+    "f1_weighted": 1.0,
+    "high_risk_class_recall": 0.0,
+    "roc_auc": null,
+    "confusion_matrix": [
+      [
+        1
+      ]
+    ],
+    "labels": [
+      "MODERATE"
+    ],
+    "feature_importance": {}
+  }
+}

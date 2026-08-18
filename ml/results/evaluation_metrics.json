@@ -1,0 +1,89 @@
+{
+  "LogisticRegression": {
+    "model_name": "LogisticRegression",
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "precision_weighted": 1.0,
+    "recall_weighted": 1.0,
+    "f1_weighted": 1.0,
+    "high_risk_class_recall": 0.0,
+    "roc_auc": null,
+    "confusion_matrix": [
+      [
+        1
+      ]
+    ],
+    "labels": [
+      "MODERATE"
+    ],
+    "feature_importance": {}
+  },
+  "DecisionTree": {
+    "model_name": "DecisionTree",
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "precision_weighted": 1.0,
+    "recall_weighted": 1.0,
+    "f1_weighted": 1.0,
+    "high_risk_class_recall": 0.0,
+    "roc_auc": null,
+    "confusion_matrix": [
+      [
+        1
+      ]
+    ],
+    "labels": [
+      "MODERATE"
+    ],
+    "feature_importance": {
+      "day_of_month": 1.0,
+      "hour": 0.0,
+      "day_of_week": 0.0,
+      "month": 0.0,
+      "is_weekend": 0.0,
+      "is_night": 0.0,
+      "dist_police_km": 0.0,
+      "dist_hospital_km": 0.0,
+      "dist_nearest_crime_km": 0.0,
+      "crime_density_1km": 0.0,
+      "gis_area_risk": 0.0
+    }
+  },
+  "RandomForest": {
+    "model_name": "RandomForest",
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "precision_weighted": 1.0,
+    "recall_weighted": 1.0,
+    "f1_weighted": 1.0,
+    "high_risk_class_recall": 0.0,
+    "roc_auc": null,
+    "confusion_matrix": [
+      [
+        1
+      ]
+    ],
+    "labels": [
+      "MODERATE"
+    ],
+    "feature_importance": {
+      "day_of_month": 0.32,
+      "hour": 0.24657142857142855,
+      "day_of_week": 0.1842857142857143,
+      "month": 0.14171428571428568,
+      "is_weekend": 0.10071428571428571,
+      "is_night": 0.006714285714285725,
+      "dist_police_km": 0.0,
+      "dist_hospital_km": 0.0,
+      "dist_nearest_crime_km": 0.0,
+      "crime_density_1km": 0.0,
+      "gis_area_risk": 0.0
+    }
+  }
+}

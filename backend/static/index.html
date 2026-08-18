@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeHer — Maps & Geographic Intelligence</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body, html { height: 100%; width: 100%; overflow: hidden; background: #0f172a; color: #f8fafc; }
+        
+        #app-container { display: flex; height: 100vh; width: 100vw; }
+        #sidebar { width: 380px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 20px; z-index: 1000; overflow-y: auto; }
+        #map-container { flex: 1; position: relative; height: 100%; }
+        #map { width: 100%; height: 100%; }
+
+        .brand-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .brand-logo { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .tagline { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+        .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
+        .input-field { flex: 1; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; }
+        .btn-search { padding: 10px 16px; background: #8b5cf6; border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-search:hover { background: #7c3aed; }
+
+        .panel-card { background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .panel-title { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        
+        .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .metric-box { background: #1e293b; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #334155; }
+        .metric-value { font-size: 20px; font-weight: 700; color: #38bdf8; }
+        .metric-label { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+        .badge-live { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); padding: 4px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <!-- Sidebar Controls -->
+        <div id="sidebar">
+            <div class="brand-header">
+                <div>
+                    <div class="brand-logo">SafeHer GIS</div>
+                    <div class="tagline">Maps & PostGIS Geographic Intelligence</div>
+                </div>
+            </div>
+
+            <!-- Coordinate Search -->
+            <div class="search-box">
+                <input type="text" id="search-input" class="input-field" placeholder="17.3850, 78.4867 (Lat, Lng)" value="17.3850, 78.4867">
+                <button class="btn-search" onclick="handleSearch()">Search</button>
+            </div>
+
+            <!-- Real-time PostGIS Density & Signals -->
+            <div class="panel-card">
+                <div class="panel-title">
+                    <span>Geographic Signals</span>
+                    <span class="badge-live">PostGIS Live</span>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric-box">
+                        <div class="metric-value" id="val-incidents">0</div>
+                        <div class="metric-label">Nearby Incidents (1km)</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-value" id="val-density">0.00</div>
+                        <div class="metric-label">Crime Density / sq km</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-value" id="val-police">--</div>
+                        <div class="metric-label">Nearest Police (m)</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-value" id="val-hospital">--</div>
+                        <div class="metric-label">Nearest Hospital (m)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GPS User Location Panel -->
+            <div class="panel-card">
+                <div class="panel-title">
+                    <span>GPS Location Status</span>
+                </div>
+                <button class="btn-search" style="width: 100%;" onclick="locateUserGPS()">Locate My Current GPS</button>
+                <div id="gps-status" style="font-size: 12px; color: #94a3b8; margin-top: 10px; text-align: center;">Click to fetch browser GPS</div>
+            </div>
+        </div>
+
+        <!-- Leaflet Map Container -->
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <script>
+        let map;
+        let userLocationMarker = null;
+        let crimeClusterGroup = L.markerClusterGroup();
+        let policeLayerGroup = L.layerGroup();
+        let hospitalLayerGroup = L.layerGroup();
+        let emergencyFacilityLayerGroup = L.layerGroup();
+        let geographicAreasLayerGroup = L.layerGroup();
+        let roadNetworkLayerGroup = L.layerGroup();
+
+        // Default Hyderabad Coordinates
+        let currentLat = 17.3850;
+        let currentLng = 78.4867;
+
+        function initMap() {
+            map = L.map('map', {
+                center: [currentLat, currentLng],
+                zoom: 13,
+                zoomControl: true
+            });
+
+            // Dark Matter Basemap
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Add Layer Control
+            const overlayMaps = {
+                "🔴 Crime Incidents": crimeClusterGroup,
+                "👮 Police Stations": policeLayerGroup,
+                "🏥 Hospitals": hospitalLayerGroup,
+                "⛽ Emergency Services": emergencyFacilityLayerGroup,
+                "🛡️ Jurisdiction Polygons": geographicAreasLayerGroup,
+                "🛣️ Road Network": roadNetworkLayerGroup
+            };
+
+            map.addLayer(crimeClusterGroup);
+            map.addLayer(policeLayerGroup);
+            map.addLayer(hospitalLayerGroup);
+            map.addLayer(emergencyFacilityLayerGroup);
+            map.addLayer(geographicAreasLayerGroup);
+            map.addLayer(roadNetworkLayerGroup);
+
+            L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
+
+            // Fetch initial map features
+            loadGeographicData(currentLat, currentLng);
+        }
+
+        async function loadGeographicData(lat, lng) {
+            currentLat = lat;
+            currentLng = lng;
+
+            // 1. Fetch Crime Density & Geographic Signals
+            try {
+                const resSignals = await fetch(`/api/v1/map/crime-density?latitude=${lat}&longitude=${lng}&radius=1000`);
+                if (resSignals.ok) {
+                    const data = await resSignals.json();
+                    document.getElementById('val-incidents').innerText = data.nearby_incident_count;
+                    document.getElementById('val-density').innerText = data.crime_density_per_sq_km;
+                    document.getElementById('val-police').innerText = data.distance_to_nearest_police_station_meters || 'N/A';
+                    document.getElementById('val-hospital').innerText = data.distance_to_nearest_hospital_meters || 'N/A';
+                }
+            } catch (e) { console.error("Density fetch error:", e); }
+
+            // 2. Fetch Crime Incidents & Populate Cluster Group
+            try {
+                crimeClusterGroup.clearLayers();
+                const resIncidents = await fetch(`/api/v1/map/incidents/nearby?latitude=${lat}&longitude=${lng}&radius=10000`);
+                if (resIncidents.ok) {
+                    const data = await resIncidents.json();
+                    data.incidents.forEach(inc => {
+                        if (inc.latitude && inc.longitude) {
+                            const marker = L.circleMarker([inc.latitude, inc.longitude], {
+                                radius: 8,
+                                fillColor: '#ef4444',
+                                color: '#ffffff',
+                                weight: 2,
+                                opacity: 1,
+                                fillOpacity: 0.8
+                            }).bindPopup(`
+                                <b>🔴 ${inc.incident_type}</b><br/>
+                                ${inc.description || 'Verified Incident'}<br/>
+                                <small>Severity: ${inc.severity || 'N/A'} | Ref: ${inc.source_reference || 'Official'}</small>
+                            `);
+                            crimeClusterGroup.addLayer(marker);
+                        }
+                    });
+                }
+            } catch (e) { console.error("Incidents fetch error:", e); }
+
+            // 3. Fetch Emergency Facilities
+            try {
+                policeLayerGroup.clearLayers();
+                hospitalLayerGroup.clearLayers();
+                emergencyFacilityLayerGroup.clearLayers();
+
+                const resFacilities = await fetch(`/api/v1/map/emergency-services/nearby?latitude=${lat}&longitude=${lng}&radius=10000`);
+                if (resFacilities.ok) {
+                    const data = await resFacilities.json();
+                    data.facilities.forEach(fac => {
+                        const iconColor = fac.facility_type === 'police' ? '#3b82f6' : fac.facility_type === 'hospital' ? '#22c55e' : '#f59e0b';
+                        const marker = L.circleMarker([fac.latitude, fac.longitude], {
+                            radius: 7,
+                            fillColor: iconColor,
+                            color: '#ffffff',
+                            weight: 1.5,
+                            fillOpacity: 0.9
+                        }).bindPopup(`
+                            <b>${fac.facility_type === 'police' ? '👮 Police Station' : fac.facility_type === 'hospital' ? '🏥 Hospital' : '⛽ Facility'}</b><br/>
+                            ${fac.name}<br/>
+                            <small>Distance: ${fac.distance_meters} meters</small>
+                        `);
+
+                        if (fac.facility_type === 'police') policeLayerGroup.addLayer(marker);
+                        else if (fac.facility_type === 'hospital') hospitalLayerGroup.addLayer(marker);
+                        else emergencyFacilityLayerGroup.addLayer(marker);
+                    });
+                }
+            } catch (e) { console.error("Facilities fetch error:", e); }
+
+            // 4. Fetch Geographic Jurisdiction Polygons
+            try {
+                geographicAreasLayerGroup.clearLayers();
+                const resAreas = await fetch(`/api/v1/map/geographic-areas`);
+                if (resAreas.ok) {
+                    const data = await resAreas.json();
+                    data.geographic_areas.forEach(area => {
+                        if (area.geojson_boundary) {
+                            const geojson = JSON.parse(area.geojson_boundary);
+                            const polyLayer = L.geoJSON(geojson, {
+                                style: {
+                                    color: '#8b5cf6',
+                                    weight: 2,
+                                    fillColor: '#8b5cf6',
+                                    fillOpacity: 0.15
+                                }
+                            }).bindPopup(`
+                                <b>🛡️ ${area.name}</b><br/>
+                                District: ${area.district || 'N/A'}<br/>
+                                <small>Risk Index: ${area.risk_index || 'Unrated'}</small>
+                            `);
+                            geographicAreasLayerGroup.addLayer(polyLayer);
+                        }
+                    });
+                }
+            } catch (e) { console.error("Geographic areas fetch error:", e); }
+        }
+
+        function handleSearch() {
+            const input = document.getElementById('search-input').value.split(',');
+            if (input.length === 2) {
+                const lat = parseFloat(input[0].trim());
+                const lng = parseFloat(input[1].trim());
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    map.setView([lat, lng], 14);
+                    loadGeographicData(lat, lng);
+                }
+            }
+        }
+
+        function locateUserGPS() {
+            const statusEl = document.getElementById('gps-status');
+            if (navigator.geolocation) {
+                statusEl.innerText = "Locating GPS...";
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        statusEl.innerText = `GPS Found: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                        
+                        if (userLocationMarker) map.removeLayer(userLocationMarker);
+                        userLocationMarker = L.marker([lat, lng]).addTo(map).bindPopup("📍 Your Current GPS Location").openPopup();
+                        
+                        map.setView([lat, lng], 14);
+                        loadGeographicData(lat, lng);
+                    },
+                    err => {
+                        statusEl.innerText = "GPS Permission Denied or Unavailable";
+                    }
+                );
+            } else {
+                statusEl.innerText = "Geolocation not supported by browser";
+            }
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
