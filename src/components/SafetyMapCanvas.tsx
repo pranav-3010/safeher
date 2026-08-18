@@ -12,6 +12,8 @@ interface MapData {
   selectedRouteId?: string;
   havens?: SafeHaven[];
   userLocation?: LatLng;
+  startLocation?: { name: string; lat: number; lng: number };
+  endLocation?: { name: string; lat: number; lng: number };
   onZoneClick?: (zone: SafetyZone) => void;
   fitToRoute?: boolean;
 }
@@ -46,6 +48,20 @@ const userIcon = L.divIcon({
   html: `<div style="width:16px;height:16px;border-radius:50%;background:#2563EB;border:3px solid #fff;box-shadow:0 0 0 6px rgba(37,99,235,.18),0 1px 4px rgba(0,0,0,.3);"></div>`,
   iconSize: [16, 16],
   iconAnchor: [8, 8],
+});
+
+const startPinIcon = L.divIcon({
+  className: 'safeher-marker',
+  html: `<div style="background:#16803A;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:800;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;gap:4px;white-space:nowrap;">📍 START</div>`,
+  iconSize: [80, 24],
+  iconAnchor: [40, 24],
+});
+
+const endPinIcon = L.divIcon({
+  className: 'safeher-marker',
+  html: `<div style="background:#DC2626;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:800;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;gap:4px;white-space:nowrap;">🏁 END</div>`,
+  iconSize: [80, 24],
+  iconAnchor: [40, 24],
 });
 
 function zoneIcon(level: RiskLevel) {
@@ -91,14 +107,12 @@ export default function SafetyMapCanvas({
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    // ensure correct sizing after mount
     setTimeout(() => map.invalidateSize(), 60);
     return () => {
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // draw layers when data changes
@@ -137,16 +151,16 @@ export default function SafetyMapCanvas({
     const routeLines: L.Polyline[] = [];
     const drawRoute = (r: RouteOption, selected: boolean) => {
       const latlngs: L.LatLngExpression[] = r.path.map((p) => [p.lat, p.lng]);
-      const color = selected ? '#2563EB' : '#9CA3AF';
+      const color = r.id.includes('safest') ? '#16803A' : r.id.includes('fastest') ? '#DC2626' : '#2563EB';
       const line = L.polyline(latlngs, {
-        color,
-        weight: selected ? 5 : 3,
-        opacity: selected ? 0.9 : 0.5,
+        color: selected ? color : '#9CA3AF',
+        weight: selected ? 6 : 3,
+        opacity: selected ? 0.95 : 0.4,
         dashArray: selected ? undefined : '6,8',
         lineJoin: 'round',
       });
       line.bindPopup(
-        `<div style="min-width:140px;"><div style="font-weight:600;color:#172033;">${r.label} Route</div>
+        `<div style="min-width:140px;"><div style="font-weight:700;color:#172033;">${r.label}</div>
         <div style="font-size:12px;color:#6B7280;">${r.durationMin} min · ${r.distanceKm} km · Safety ${r.safetyScore}/100</div></div>`
       );
       line.addTo(layer);
@@ -169,7 +183,19 @@ export default function SafetyMapCanvas({
         .addTo(layer);
     });
 
-    if (data.userLocation) {
+    if (data.startLocation) {
+      L.marker([data.startLocation.lat, data.startLocation.lng], { icon: startPinIcon })
+        .bindPopup(`<div style="font-weight:700;color:#16803A;">START: ${data.startLocation.name}</div>`)
+        .addTo(layer);
+    }
+
+    if (data.endLocation) {
+      L.marker([data.endLocation.lat, data.endLocation.lng], { icon: endPinIcon })
+        .bindPopup(`<div style="font-weight:700;color:#DC2626;">END: ${data.endLocation.name}</div>`)
+        .addTo(layer);
+    }
+
+    if (data.userLocation && !data.startLocation) {
       L.marker([data.userLocation.lat, data.userLocation.lng], { icon: userIcon })
         .bindPopup('<div style="font-weight:600;color:#172033;">Your location</div>')
         .addTo(layer);
@@ -177,7 +203,7 @@ export default function SafetyMapCanvas({
 
     if (data.fitToRoute && routeLines.length) {
       const group = L.featureGroup(routeLines);
-      map.fitBounds(group.getBounds().pad(0.18), { animate: false });
+      map.fitBounds(group.getBounds().pad(0.22), { animate: false });
     }
 
     setTimeout(() => map.invalidateSize(), 50);
