@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & OS Files
+*.log
+.DS_Store
+Thum.db
+
+# Builds
+dist/
+build/
+*.egg-info/
