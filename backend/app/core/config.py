@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = Field(default="/api/v1", description="API v1 route prefix")
 
     SUPABASE_URL: str = Field(
-        default="https://your-project.supabase.co",
+        default="https://wfvckuomhbdbyrogelct.supabase.co",
         description="Supabase Project Base URL"
     )
     SUPABASE_ANON_KEY: str = Field(
@@ -51,8 +51,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
 
     CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173", "http://localhost:8000"],
-        description="Allowed CORS origins"
+        default=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8000",
+            "https://safeher-rose.vercel.app",
+            "https://*.vercel.app"
+        ],
+        description="Allowed CORS origins including Vercel frontend domain"
     )
 
     @field_validator("CORS_ORIGINS", mode="before")
