@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # LLM Intelligence Configuration
     LLM_API_KEY: Optional[str] = Field(default=None, description="LLM Provider API Key")
-    LLM_MODEL: str = Field(default="gemini-1.5-flash", description="LLM Model identifier")
+    LLM_MODEL: str = Field(default="gemini-flash-latest", description="LLM Model identifier")
     LLM_BASE_URL: Optional[str] = Field(default=None, description="LLM Base Endpoint URL")
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Google Gemini API Key")
 

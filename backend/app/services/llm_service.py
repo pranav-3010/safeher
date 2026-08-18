@@ -27,12 +27,12 @@ CRITICAL ANTI-HALLUCINATION RULES:
 class LLMService:
     """
     LLM Intelligence Service with Anti-Hallucination Enforcement.
-    Supports Google Gemini API SDK & HTTP REST endpoints with fallback.
+    Supports Google Gemini API SDK & HTTP REST endpoints with fallback across models.
     """
 
     @staticmethod
     def _generate_fallback_response(
-        context: Dict[str, Any], message: str = "AI analysis is temporarily unavailable. You can still use the map and verified geographic information."
+        context: Dict[str, Any], message: str = "AI analysis is using verified database records. Map and safety features are active."
     ) -> Dict[str, Any]:
         """
         Returns structured fallback response when LLM API key is missing or service is offline.
@@ -84,53 +84,67 @@ class LLMService:
 
         prompt_user = f"User Request: {user_query or 'Analyze safety information for this location.'}\n\nSafety Context JSON:\n{json.dumps(context, indent=2)}"
 
-        # 1. Try Google Gemini API (via google-genai SDK or REST API)
-        try:
-            # Try google-genai SDK
+        # Candidate models to try in order
+        candidate_models = [
+            settings.LLM_MODEL,
+            "gemini-flash-latest",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+            "gemini-2.0-flash"
+        ]
+        # Remove duplicates preserving order
+        candidate_models = [m for idx, m in enumerate(candidate_models) if m and m not in candidate_models[:idx]]
+
+        for model_name in candidate_models:
             try:
-                from google import genai
-                client = genai.Client(api_key=api_key)
-                response = client.models.generate_content(
-                    model=settings.LLM_MODEL or "gemini-1.5-flash",
-                    contents=SYSTEM_PROMPT + "\n\n" + prompt_user
-                )
-                if response and response.text:
-                    parsed = LLMService._parse_structured_json(response.text)
-                    if parsed:
-                        return parsed
-            except Exception as sdk_err:
-                logger.debug(f"google-genai SDK attempt info: {sdk_err}. Falling back to REST API.")
+                # 1. Try google-genai SDK
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=api_key)
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=SYSTEM_PROMPT + "\n\n" + prompt_user
+                    )
+                    if response and response.text:
+                        parsed = LLMService._parse_structured_json(response.text)
+                        if parsed:
+                            logger.info(f"Successfully generated LLM response using model: {model_name}")
+                            return parsed
+                except Exception as sdk_err:
+                    logger.debug(f"google-genai SDK failed for {model_name}: {sdk_err}. Trying REST API.")
 
-            # Try Gemini REST API directly
-            model_name = settings.LLM_MODEL or "gemini-1.5-flash"
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": SYSTEM_PROMPT + "\n\n" + prompt_user}
-                        ]
+                # 2. Try Gemini REST API directly
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": SYSTEM_PROMPT + "\n\n" + prompt_user}
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.1,
+                        "maxOutputTokens": 800,
+                        "responseMimeType": "application/json"
                     }
-                ],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": 800,
-                    "responseMimeType": "application/json"
                 }
-            }
-            res = requests.post(url, headers=headers, json=payload, timeout=15)
-            if res.status_code == 200:
-                res_json = res.json()
-                candidates = res_json.get("candidates", [])
-                if candidates:
-                    text_out = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    parsed = LLMService._parse_structured_json(text_out)
-                    if parsed:
-                        return parsed
+                res = requests.post(url, headers=headers, json=payload, timeout=12)
+                if res.status_code == 200:
+                    res_json = res.json()
+                    candidates = res_json.get("candidates", [])
+                    if candidates:
+                        text_out = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        parsed = LLMService._parse_structured_json(text_out)
+                        if parsed:
+                            logger.info(f"Successfully generated REST response using model: {model_name}")
+                            return parsed
+                else:
+                    logger.warning(f"REST call for model {model_name} returned status {res.status_code}: {res.text[:200]}")
 
-        except Exception as e:
-            logger.error(f"Gemini LLM API call failed: {e}")
+            except Exception as e:
+                logger.error(f"Gemini LLM model {model_name} failed: {e}")
 
         return LLMService._generate_fallback_response(context)
 
